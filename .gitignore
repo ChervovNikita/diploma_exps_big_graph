@@ -1,0 +1,7 @@
+logs
+submissions
+old
+**.csv
+**.pdf
+**/venv/
+**/splits/
