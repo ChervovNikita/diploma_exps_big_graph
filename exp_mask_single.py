@@ -1,7 +1,7 @@
 """
-Experiment: Masking multiple nodes per graph sample
-- Instead of predicting one target node at a time, mask MASK_COUNT nodes and predict all of them
-- This is more efficient and follows the approach from eda_mask.ipynb
+Experiment: Masking with single-node prediction (no batch effects)
+- Train: mask MASK_COUNT nodes at once (efficient training)
+- Val/Test: mask ONE node at a time (no information leak between predictions)
 """
 import pandas as pd
 import numpy as np
@@ -17,10 +17,8 @@ import random
 import pickle
 import os
 
-# ============== Experiment Name ==============
-EXP_NAME = 'exp_mask_0.25'
+EXP_NAME = 'exp_mask_single'
 
-# ============== Load Precomputed Splits ==============
 print("Loading precomputed splits...")
 SPLITS_DIR = 'splits'
 
@@ -31,7 +29,7 @@ train_nodes = np.load(os.path.join(SPLITS_DIR, 'train_nodes.npy')).tolist()
 val_nodes = np.load(os.path.join(SPLITS_DIR, 'val_nodes.npy')).tolist()
 test_nodes = np.load(os.path.join(SPLITS_DIR, 'test_nodes.npy')).tolist()
 unknown_nodes = np.load(os.path.join(SPLITS_DIR, 'unknown_nodes.npy')).tolist()
-node_labels = np.load(os.path.join(SPLITS_DIR, 'node_labels_masked.npy'))  # Test nodes masked as -1
+node_labels = np.load(os.path.join(SPLITS_DIR, 'node_labels_masked.npy'))
 
 with open(os.path.join(SPLITS_DIR, 'labels.txt'), 'r') as f:
     labels = [line.strip() for line in f]
@@ -39,79 +37,41 @@ with open(os.path.join(SPLITS_DIR, 'labels.txt'), 'r') as f:
 with open(os.path.join(SPLITS_DIR, 'metadata.pkl'), 'rb') as f:
     metadata = pickle.load(f)
 
-
 max_node = metadata['max_node']
 print(f"Labels: {labels}")
 print(f"Train nodes: {len(train_nodes)}, Val nodes: {len(val_nodes)}, Test nodes: {len(test_nodes)}")
 
-# Create node_class matrix (test nodes are -1, get uniform distribution)
 node_class = np.zeros((max_node + 1, len(labels)))
 for n in range(max_node + 1):
     if node_labels[n] >= 0:
         node_class[n, node_labels[n]] = 1
     else:
-        node_class[n, :] = np.ones(len(labels)) / len(labels)  # Uniform for masked/unknown
+        node_class[n, :] = np.ones(len(labels)) / len(labels)
 
-# ============== Load Edge Data ==============
 print("Loading edge data...")
 data = pd.read_csv('CR_real_masks_more_labeled_veritices_agreed.csv')
 data['node_id1'] -= 1
 data['node_id2'] -= 1
 
-# ============== Device Setup ==============
 DEVICE_CHOICE = "cuda"
 device = torch.device(DEVICE_CHOICE if torch.cuda.is_available() else "cpu")
-print(f"Device: {device}")
+num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+multi_gpu = (device.type == "cuda" and num_gpus >= 2)
+print(f"Device: {device}, GPUs: {num_gpus}, Multi-GPU: {multi_gpu}")
 
-# Unknown nodes subset
 random.seed(42)
 unknown_nodes_shuffled = unknown_nodes.copy()
 random.shuffle(unknown_nodes_shuffled)
-NUM_UNKNOWN_FRACTION = 0.25
+NUM_UNKNOWN_FRACTION = 0.05
 num_unknown_to_use = int(len(unknown_nodes_shuffled) * NUM_UNKNOWN_FRACTION)
 unknown_nodes_subset = unknown_nodes_shuffled[:num_unknown_to_use]
 print(f"Using {num_unknown_to_use} unknown nodes ({NUM_UNKNOWN_FRACTION*100:.0f}%)")
 
-# ============== Masking Config ==============
-MASK_COUNT = 64  # Number of nodes to mask per sample
+MASK_COUNT = 64
 FEATURE_TYPE = 'onehot'
-
-def compute_graph_based_features(sorted_nodes, subgraph_edges, node_class, num_classes):
-    num_nodes = len(sorted_nodes)
-    node_mapping = {node: i for i, node in enumerate(sorted_nodes)}
-    node_labels_arr = np.array([np.argmax(node_class[n]) if np.max(node_class[n]) > 0.5 else -1 for n in sorted_nodes])
-    features = np.zeros((num_nodes, 5 * num_classes))
-    
-    for _, row in subgraph_edges.iterrows():
-        n1, n2, w = row['node_id1'], row['node_id2'], row['ibd_sum']
-        if n1 in node_mapping and n2 in node_mapping:
-            i, j = node_mapping[n1], node_mapping[n2]
-            if node_labels_arr[j] >= 0:
-                c = node_labels_arr[j]
-                features[i, c] += 1
-                features[i, num_classes + c] += w
-                features[i, 3*num_classes + c] = max(features[i, 3*num_classes + c], w)
-                features[i, 4*num_classes + c] += 1
-            if node_labels_arr[i] >= 0:
-                c = node_labels_arr[i]
-                features[j, c] += 1
-                features[j, num_classes + c] += w
-                features[j, 3*num_classes + c] = max(features[j, 3*num_classes + c], w)
-                features[j, 4*num_classes + c] += 1
-    
-    for c in range(num_classes):
-        mask = features[:, c] > 0
-        features[mask, num_classes + c] /= features[mask, c]
-    
-    return torch.tensor(features, dtype=torch.float)
 
 
 class MaskedGraphDataset(Dataset):
-    """
-    Dataset that creates samples by masking MASK_COUNT nodes at a time.
-    For training: randomly mask nodes from train_nodes
-    For val/test: mask specific nodes we want to predict
-    """
     def __init__(self, data_df, unknown_nodes_subset, train_nodes, val_nodes, test_nodes, 
                  split='train', mask_count=64, num_samples=500, return_node_ids=False):
         super().__init__()
@@ -134,31 +94,23 @@ class MaskedGraphDataset(Dataset):
     
     def len(self):
         if self.split == 'train':
-            return self.num_samples  # Generate num_samples random masked graphs
+            return self.num_samples
         else:
-            # For val/test, we need ceil(len(target_nodes) / mask_count) samples
-            return (len(self.target_nodes) + self.mask_count - 1) // self.mask_count
+            return len(self.target_nodes)
     
     def get(self, idx):
-        # Determine which nodes to include in graph
         nodes_to_include = self.train_nodes.copy()
         nodes_to_include.extend(self.unknown_nodes_subset)
         
         if self.split == 'train':
-            # Randomly select mask_count nodes to mask
             if len(self.train_nodes) < self.mask_count:
                 mask_nodes = self.train_nodes.copy()
             else:
                 mask_nodes = random.sample(self.train_nodes, self.mask_count)
         else:
-            # For val/test, mask specific batch of nodes
-            start_idx = idx * self.mask_count
-            end_idx = min(start_idx + self.mask_count, len(self.target_nodes))
-            mask_nodes = self.target_nodes[start_idx:end_idx]
-            # Add val/test nodes to graph
-            for n in mask_nodes:
-                if n not in nodes_to_include:
-                    nodes_to_include.append(n)
+            mask_nodes = [self.target_nodes[idx]]
+            if mask_nodes[0] not in nodes_to_include:
+                nodes_to_include.append(mask_nodes[0])
         
         nodes_set = set(nodes_to_include)
         mask = (self.data_df['node_id1'].isin(nodes_set) & self.data_df['node_id2'].isin(nodes_set))
@@ -170,37 +122,28 @@ class MaskedGraphDataset(Dataset):
         sorted_nodes = sorted(nodes_to_include)
         node_mapping = {node: i for i, node in enumerate(sorted_nodes)}
         
-        # Undirected graph
         src = [node_mapping[n] for n in subgraph_edges['node_id1'].values]
         dst = [node_mapping[n] for n in subgraph_edges['node_id2'].values]
         edge_index = torch.tensor([src + dst, dst + src], dtype=torch.long)
         
-        # Node features
-        if FEATURE_TYPE == 'graph_based':
-            node_features = compute_graph_based_features(sorted_nodes, subgraph_edges, node_class, len(labels))
-        else:
-            node_features = torch.tensor(node_class[sorted_nodes], dtype=torch.float)
+        node_features = torch.tensor(node_class[sorted_nodes], dtype=torch.float)
         
-        # Create mask tensor
         mask_indices = [node_mapping[n] for n in mask_nodes if n in node_mapping]
         predict_mask = torch.zeros(len(sorted_nodes), dtype=torch.bool)
         predict_mask[mask_indices] = True
         
-        # Mask features for masked nodes
         node_features_masked = node_features.clone()
         if FEATURE_TYPE == 'graph_based':
             node_features_masked[predict_mask] = torch.zeros(5 * len(labels))
         else:
             node_features_masked[predict_mask] = torch.ones(len(labels)) / len(labels)
         
-        # Labels (test nodes have -1, doesn't matter since we only evaluate via score.py)
-        y = torch.tensor([node_labels[n] if node_labels[n] >= 0 else 0 for n in sorted_nodes], dtype=torch.long)
+        onehot = torch.tensor(node_class[sorted_nodes], dtype=torch.float)
+        y = torch.tensor([torch.argmax(onehot[i]).item() for i in range(len(sorted_nodes))], dtype=torch.long)
         
-        # Edge weights
         ibd = subgraph_edges['ibd_sum'].values
         edge_weights = torch.tensor(list(ibd) + list(ibd), dtype=torch.float)
         
-        # Original node IDs for masked nodes (for submission)
         if self.return_node_ids:
             masked_node_ids = torch.tensor([mask_nodes[mask_indices.index(i)] for i in mask_indices], dtype=torch.long)
             return Data(
@@ -223,7 +166,6 @@ class MaskedGraphDataset(Dataset):
         )
 
 
-# ============== Model ==============
 class TAGConvModel(torch.nn.Module):
     def __init__(self, num_features, num_classes, hidden_dim=512):
         super().__init__()
@@ -264,7 +206,6 @@ class SingleDeviceWrapper(torch.nn.Module):
         return self.module(batch), batch
 
 
-# ============== Datasets ==============
 train_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, val_nodes, test_nodes,
                                     split='train', mask_count=MASK_COUNT, num_samples=500)
 val_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, val_nodes, test_nodes,
@@ -272,21 +213,23 @@ val_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, val_no
 test_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, val_nodes, test_nodes,
                                    split='test', mask_count=MASK_COUNT, return_node_ids=True)
 
-print(f"Train samples: {len(train_dataset)}, Val samples: {len(val_dataset)}, Test samples: {len(test_dataset)}")
+print(f"Train samples: {len(train_dataset)}, Val samples: {len(val_dataset)} (1 node each), Test samples: {len(test_dataset)} (1 node each)")
 
-# ============== Model Setup ==============
 num_features = 5 * len(labels) if FEATURE_TYPE == 'graph_based' else len(labels)
 base_model = TAGConvModel(num_features=num_features, num_classes=len(labels)).to(
     torch.device("cuda:0") if device.type == "cuda" else device
 )
 
-model = SingleDeviceWrapper(base_model, torch.device("cuda:0") if device.type == "cuda" else device)
-print("Single GPU mode")
+if multi_gpu:
+    model = GeoDataParallel(base_model, device_ids=list(range(num_gpus)))
+    print(f"Multi-GPU mode: {num_gpus} GPUs")
+else:
+    model = SingleDeviceWrapper(base_model, torch.device("cuda:0") if device.type == "cuda" else device)
+    print("Single GPU mode")
 
 print(f"Features: {FEATURE_TYPE} ({num_features}), Params: {sum(p.numel() for p in model.parameters()):,}")
 
 
-# ============== Evaluation ==============
 def evaluate(model, loader, use_amp=True):
     model.eval()
     y_true, y_pred = [], []
@@ -309,7 +252,6 @@ def evaluate(model, loader, use_amp=True):
 
 
 def generate_submission(model, loader, output_path, use_amp=True):
-    """Generate submission file with predictions for test nodes."""
     model.eval()
     all_node_ids = []
     all_predictions = []
@@ -332,26 +274,24 @@ def generate_submission(model, loader, output_path, use_amp=True):
             all_node_ids.extend(node_ids)
             all_predictions.extend(preds)
     
-    # Create submission dataframe
     submission_df = pd.DataFrame({
         'node_id': all_node_ids,
         'predicted_label': [labels[p] for p in all_predictions]
     })
     
-    # Ensure output directory exists
     os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
     submission_df.to_csv(output_path, index=False)
     print(f"Submission saved to: {output_path}")
     return submission_df
 
 
-# ============== Training ==============
 LR, WD, EPOCHS, PATIENCE = 0.0001, 0.0001, 10, 5
-BATCH_SIZE = 1  # One graph per batch (graph already contains multiple masked nodes)
+TRAIN_BATCH_SIZE = 1
+EVAL_BATCH_SIZE = 1
 
-train_loader = DataListLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
-val_loader = DataListLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
-test_loader = DataListLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
+train_loader = DataListLoader(train_dataset, batch_size=TRAIN_BATCH_SIZE, shuffle=True, num_workers=4)
+val_loader = DataListLoader(val_dataset, batch_size=EVAL_BATCH_SIZE, shuffle=False, num_workers=4)
+test_loader = DataListLoader(test_dataset, batch_size=EVAL_BATCH_SIZE, shuffle=False, num_workers=4)
 
 class_counts = [sum(1 for n in train_nodes if node_labels[n] == c) for c in range(len(labels))]
 class_weights = torch.tensor([max(class_counts) / c for c in class_counts], dtype=torch.float).to(torch.device("cuda:0"))
@@ -416,8 +356,12 @@ if best_state:
     to_load.load_state_dict(best_state)
     print("Loaded best model state")
 
-# ============== Generate Submission ==============
+test_f1, y_true, y_pred = evaluate(model, test_loader, use_amp)
+print(f"Test F1: {test_f1:.4f}")
+print(classification_report(y_true, y_pred, target_names=labels, digits=4))
+
 os.makedirs('submissions', exist_ok=True)
 submission_path = f'submissions/{EXP_NAME}.csv'
 generate_submission(model, test_loader, submission_path, use_amp)
 print(f"\nTo score: python score.py {submission_path}")
+

@@ -83,38 +83,51 @@ def compute_graph_based_features(sorted_nodes, subgraph_edges, node_class, num_c
     num_nodes = len(sorted_nodes)
     node_mapping = {node: i for i, node in enumerate(sorted_nodes)}
     
-    # Get node labels (only labeled nodes contribute)
-    node_labels = np.array([np.argmax(node_class[n]) if np.max(node_class[n]) > 0.5 else -1 for n in sorted_nodes])
+    # Get node labels (only labeled nodes contribute) - vectorized
+    node_class_subset = node_class[sorted_nodes]
+    node_labels = np.argmax(node_class_subset, axis=1)
+    node_labels[np.max(node_class_subset, axis=1) <= 0.5] = -1
     
-    features = np.zeros((num_nodes, 5 * num_classes))
+    features = np.zeros((num_nodes, 5 * num_classes), dtype=np.float32)
     
-    # Build adjacency with weights
-    for _, row in subgraph_edges.iterrows():
-        n1, n2, w = row['node_id1'], row['node_id2'], row['ibd_sum']
+    # Use dict of lists for better performance than nested lists
+    from collections import defaultdict
+    weights_per_node_class = defaultdict(list)
+    
+    # Vectorized edge processing
+    edges = subgraph_edges[['node_id1', 'node_id2', 'ibd_sum']].values
+    
+    for n1, n2, w in edges:
         if n1 in node_mapping and n2 in node_mapping:
             i, j = node_mapping[n1], node_mapping[n2]
+            c_j = node_labels[j]
+            c_i = node_labels[i]
+            
             # Only labeled neighbors contribute (per paper)
-            if node_labels[j] >= 0:
-                c = node_labels[j]
-                features[i, c] += 1  # count
-                features[i, num_classes + c] += w  # sum for avg
-                features[i, 3*num_classes + c] = max(features[i, 3*num_classes + c], w)  # max
-                features[i, 4*num_classes + c] += 1  # IBD segment count
-            if node_labels[i] >= 0:
-                c = node_labels[i]
-                features[j, c] += 1
-                features[j, num_classes + c] += w
-                features[j, 3*num_classes + c] = max(features[j, 3*num_classes + c], w)
-                features[j, 4*num_classes + c] += 1
+            if c_j >= 0:
+                features[i, c_j] += 1  # n_i,c: neighbor count
+                features[i, num_classes + c_j] += w  # sum for w̄_i,c (will be divided to get average)
+                features[i, 3*num_classes + c_j] = max(features[i, 3*num_classes + c_j], w)  # w_max_i,c
+                features[i, 4*num_classes + c_j] += w  # IBD_i,c: total IBD sum to class c
+                weights_per_node_class[(i, c_j)].append(w)
+            
+            if c_i >= 0:
+                features[j, c_i] += 1
+                features[j, num_classes + c_i] += w
+                features[j, 3*num_classes + c_i] = max(features[j, 3*num_classes + c_i], w)
+                features[j, 4*num_classes + c_i] += w  # IBD_i,c: total IBD sum to class c
+                weights_per_node_class[(j, c_i)].append(w)
     
-    # Convert sum to average
-    for c in range(num_classes):
-        count_col = c
-        sum_col = num_classes + c
-        mask = features[:, count_col] > 0
-        features[mask, sum_col] /= features[mask, count_col]
+    # Vectorized average computation
+    count_mask = features[:, :num_classes] > 0
+    features[:, num_classes:2*num_classes][count_mask] /= features[:, :num_classes][count_mask]
     
-    return torch.tensor(features, dtype=torch.float)
+    # Compute std only where needed
+    for (i, c), weights in weights_per_node_class.items():
+        if len(weights) > 1:
+            features[i, 2*num_classes + c] = np.std(weights, dtype=np.float32)
+    
+    return torch.tensor(features, dtype=torch.float32)
 
 class GraphDataset(Dataset):
     def __init__(self, data_df, unknown_nodes_subset, train_nodes, val_nodes, test_nodes, split='train'):

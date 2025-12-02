@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Dataset, Data, Batch
 from torch_geometric.loader import DataListLoader
-from torch_geometric.nn import TAGConv, GraphNorm, DataParallel as GeoDataParallel
+from torch_geometric.nn import TAGConv, GraphNorm
 from torch.optim.lr_scheduler import StepLR
 from sklearn.metrics import f1_score, classification_report
 import random
@@ -63,8 +63,7 @@ data['node_id2'] -= 1
 DEVICE_CHOICE = "cuda"
 device = torch.device(DEVICE_CHOICE if torch.cuda.is_available() else "cpu")
 num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
-multi_gpu = (device.type == "cuda" and num_gpus >= 2)
-print(f"Device: {device}, GPUs: {num_gpus}, Multi-GPU: {multi_gpu}")
+print(f"Device: {device}, GPUs: {num_gpus}")
 
 # Unknown nodes subset
 random.seed(42)
@@ -76,7 +75,7 @@ unknown_nodes_subset = unknown_nodes_shuffled[:num_unknown_to_use]
 print(f"Using {num_unknown_to_use} unknown nodes ({NUM_UNKNOWN_FRACTION*100:.0f}%)")
 
 # ============== Config ==============
-EMBED_DIM = 32  # Trainable embedding dimension
+EMBED_DIM = 512  # Trainable embedding dimension
 
 
 class EmbedGraphDataset(Dataset):
@@ -176,6 +175,7 @@ class TAGConvModelWithEmbed(nn.Module):
     def __init__(self, num_nodes, embed_dim, num_classes, hidden_dim=512):
         super().__init__()
         self.node_embed = NodeEmbedding(num_nodes, embed_dim)
+        self.query_vector = nn.Parameter(torch.randn(embed_dim) * 0.1)
         self.first_linear = nn.Linear(embed_dim, hidden_dim)
         self.conv1 = TAGConv(hidden_dim, hidden_dim)
         self.conv2 = TAGConv(hidden_dim, hidden_dim)
@@ -184,11 +184,14 @@ class TAGConvModelWithEmbed(nn.Module):
         self.n2 = GraphNorm(hidden_dim)
         self.linear = nn.Linear(hidden_dim, num_classes)
 
-    def forward(self, data):
+    def forward(self, data, target_indices):
         node_ids, edge_index, edge_weight = data.node_ids, data.edge_index, data.weight
         
         # Get embeddings for nodes
         x = self.node_embed(node_ids)
+        
+        x = x.clone()
+        x[target_indices] = self.query_vector
         
         x = self.first_linear(x)
         x_ = x.clone()
@@ -203,6 +206,17 @@ class TAGConvModelWithEmbed(nn.Module):
         return self.linear(x)
 
 
+def compute_target_indices(batch, data_list):
+    """Compute global target indices from batch and original data list."""
+    sizes = [int(d.num_nodes) for d in data_list]
+    ptr = torch.as_tensor(np.cumsum([0] + sizes), device=batch.edge_index.device)
+    target_indices = torch.as_tensor(
+        [ptr[i].item() + int(d.target_node_idx) for i, d in enumerate(data_list)],
+        device=batch.edge_index.device
+    )
+    return target_indices
+
+
 class SingleDeviceWrapper(nn.Module):
     def __init__(self, module, device):
         super().__init__()
@@ -212,9 +226,11 @@ class SingleDeviceWrapper(nn.Module):
     def forward(self, data_list):
         if isinstance(data_list, list):
             batch = Batch.from_data_list(data_list).to(self.device, non_blocking=True)
+            target_indices = compute_target_indices(batch, data_list)
         else:
             batch = data_list.to(self.device, non_blocking=True)
-        return self.module(batch), batch
+            target_indices = data_list.target_node_idx.view(-1)
+        return self.module(batch, target_indices), batch
 
 
 # ============== Datasets ==============
@@ -232,12 +248,8 @@ base_model = TAGConvModelWithEmbed(
     num_classes=len(labels)
 ).to(torch.device("cuda:0") if device.type == "cuda" else device)
 
-if multi_gpu:
-    model = GeoDataParallel(base_model, device_ids=list(range(num_gpus)))
-    print(f"Multi-GPU mode: {num_gpus} GPUs")
-else:
-    model = SingleDeviceWrapper(base_model, torch.device("cuda:0") if device.type == "cuda" else device)
-    print("Single GPU mode")
+model = SingleDeviceWrapper(base_model, torch.device("cuda:0") if device.type == "cuda" else device)
+print("Single GPU mode")
 
 embed_params = sum(p.numel() for p in base_model.node_embed.parameters())
 total_params = sum(p.numel() for p in model.parameters())
@@ -255,15 +267,16 @@ def evaluate(model, loader, use_amp=True):
                     logits, batch_data = model(batch)
                 else:
                     batch_data = Batch.from_data_list(batch).to(device)
-                    logits = model.module(batch_data)
+                    target_indices = compute_target_indices(batch_data, batch)
+                    logits = model.module(batch_data, target_indices)
             
             sizes = [int(d.num_nodes) for d in batch]
             ptr = torch.as_tensor(np.cumsum([0] + sizes), device=logits.device)
-            target_indices = torch.as_tensor(
+            target_idx_for_pred = torch.as_tensor(
                 [ptr[i].item() + int(d.target_node_idx) for i, d in enumerate(batch)],
                 device=logits.device
             )
-            preds = torch.argmax(logits[target_indices], dim=-1).tolist()
+            preds = torch.argmax(logits[target_idx_for_pred], dim=-1).tolist()
             trues = [int(d.target_label) for d in batch]
             y_pred.extend(preds)
             y_true.extend(trues)
@@ -283,15 +296,16 @@ def generate_submission(model, loader, output_path, use_amp=True):
                     logits, batch_data = model(batch)
                 else:
                     batch_data = Batch.from_data_list(batch).to(device)
-                    logits = model.module(batch_data)
+                    target_indices = compute_target_indices(batch_data, batch)
+                    logits = model.module(batch_data, target_indices)
             
             sizes = [int(d.num_nodes) for d in batch]
             ptr = torch.as_tensor(np.cumsum([0] + sizes), device=logits.device)
-            target_indices = torch.as_tensor(
+            target_idx_for_pred = torch.as_tensor(
                 [ptr[i].item() + int(d.target_node_idx) for i, d in enumerate(batch)],
                 device=logits.device
             )
-            preds = torch.argmax(logits[target_indices], dim=-1).cpu().tolist()
+            preds = torch.argmax(logits[target_idx_for_pred], dim=-1).cpu().tolist()
             node_ids = [int(d.target_node_id) for d in batch]
             
             all_node_ids.extend(node_ids)
@@ -310,8 +324,8 @@ def generate_submission(model, loader, output_path, use_amp=True):
 
 # ============== Training ==============
 LR, WD, EPOCHS, PATIENCE = 0.0001, 0.0001, 10, 5
-TRAIN_BATCH_SIZE = num_gpus if multi_gpu else 1
-EVAL_BATCH_SIZE = num_gpus if multi_gpu else 1
+TRAIN_BATCH_SIZE = 1
+EVAL_BATCH_SIZE = 1
 
 num_workers = min(4, os.cpu_count() or 2)
 pin_memory = (device.type == "cuda")
@@ -356,17 +370,18 @@ for epoch in range(1, EPOCHS + 1):
                 out, batch_data = model(batch)
             else:
                 batch_data = Batch.from_data_list(batch).to(device)
-                out = model.module(batch_data)
+                target_indices = compute_target_indices(batch_data, batch)
+                out = model.module(batch_data, target_indices)
             
             sizes = [int(d.num_nodes) for d in batch]
             ptr = torch.as_tensor(np.cumsum([0] + sizes), device=out.device)
-            target_indices = torch.as_tensor(
+            target_idx_for_loss = torch.as_tensor(
                 [ptr[i].item() + int(d.target_node_idx) for i, d in enumerate(batch)],
                 device=out.device
             )
             targets = torch.as_tensor([int(d.target_label) for d in batch], device=out.device)
             
-            loss = criterion(out[target_indices], targets)
+            loss = criterion(out[target_idx_for_loss], targets)
         
         scaler.scale(loss).backward()
         scaler.step(optimizer)
