@@ -136,6 +136,13 @@ node2vec_embeddings = {}
 for idx, node in idx_to_node.items():
     node2vec_embeddings[node] = train_node_embeddings[idx].numpy()
 
+# Clean up Node2Vec model and loader to free GPU memory
+del node2vec_model, node2vec_loader, node2vec_optimizer, train_node_embeddings
+torch.cuda.empty_cache()
+import gc
+gc.collect()
+print("Cleaned up Node2Vec resources")
+
 def compute_graph_based_features(sorted_nodes, subgraph_edges, node_class_input, num_classes):
     num_nodes = len(sorted_nodes)
     node_mapping = {node: i for i, node in enumerate(sorted_nodes)}
@@ -435,9 +442,9 @@ class SingleDeviceWrapper(torch.nn.Module):
 
     def forward(self, data_list):
         if isinstance(data_list, list):
-            batch = Batch.from_data_list(data_list).to(self.device, non_blocking=True)
+            batch = Batch.from_data_list(data_list).to(self.device)
         else:
-            batch = data_list.to(self.device, non_blocking=True)
+            batch = data_list.to(self.device)
         return self.module(batch), batch
 
 
@@ -530,9 +537,9 @@ def generate_submission(model, loader, output_path, use_amp=True):
 LR, WD, EPOCHS, PATIENCE = 0.0001, 0.0001, 10, 5
 BATCH_SIZE = 1
 
-train_loader = DataListLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
-val_loader = DataListLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
-test_loader = DataListLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
+train_loader = DataListLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, persistent_workers=True)
+val_loader = DataListLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, persistent_workers=True)
+test_loader = DataListLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, persistent_workers=True)
 
 class_counts = [sum(1 for n in train_nodes if node_labels[n] == c) for c in range(len(labels))]
 class_weights = torch.tensor([max(class_counts) / c for c in class_counts], dtype=torch.float).to(device)
@@ -577,7 +584,10 @@ for epoch in range(1, EPOCHS + 1):
         
         if batch_idx % 50 == 0:
             loop.set_postfix(loss=f"{loss.item():.4f}")
-            torch.cuda.empty_cache()
+    
+    # Clear cache after each epoch and step scheduler
+    torch.cuda.empty_cache()
+    gc.collect()
     
     val_f1, _, _ = evaluate(model, val_loader, use_amp)
     
@@ -589,6 +599,10 @@ for epoch in range(1, EPOCHS + 1):
     else:
         patience_counter += 1
         print(f"[Epoch {epoch}] val_f1={val_f1:.4f} | loss={np.mean(losses):.4f} | patience={patience_counter}")
+    
+    # Force garbage collection between epochs
+    torch.cuda.empty_cache()
+    gc.collect()
 
 print(f"\nBest val F1: {best_val_f1:.4f}")
 
