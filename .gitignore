@@ -5,3 +5,8 @@ old
 **.pdf
 **/venv/
 **/splits/
+**/__pycache__/
+**/checkpoints/*.pt
+catboost_dataset/
+catboost_info/
+**/models
