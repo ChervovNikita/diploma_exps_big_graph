@@ -44,6 +44,7 @@ data = pd.read_csv(os.path.join(SPLITS_DIR, 'edges_data.csv'))
 
 device = torch.device("cuda:0")
 
+# now it is correct but make sure all unlabeled nodes from training phase presnt in test graphs
 random.seed(42)
 unknown_nodes_shuffled = unknown_nodes.copy()
 random.shuffle(unknown_nodes_shuffled)
@@ -67,16 +68,21 @@ def generate_submission(model, loader, output_path, use_amp=True):
     all_node_ids = []
     all_predictions = []
     with torch.no_grad():
-        for batch in tqdm(loader, desc='Generating submission', leave=False):
+        for i_num, batch in tqdm(enumerate(loader), desc='Generating submission', leave=False):
             with torch.amp.autocast('cuda', enabled=use_amp):
                 logits, batch_data = model(batch)
+                assert batch_data.y is None
                 predict_mask = batch_data.predict_mask
                 masked_node_ids = batch_data.masked_node_ids
 
             preds = torch.argmax(logits[predict_mask], dim=-1).cpu().tolist()
             node_ids = masked_node_ids.cpu().tolist()
+            if i_num == 0:
+                print('Check sum: ', sum(node_ids) == np.sum(test_nodes[:MASK_COUNT]), '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
             all_node_ids.extend(node_ids)
             all_predictions.extend(preds)
+
+    assert len(labels) == 4
 
     submission_df = pd.DataFrame({
         'node_id': all_node_ids,

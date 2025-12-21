@@ -16,26 +16,29 @@ from common import MaskedGraphDataset, TAGConvModel, SingleDeviceWrapper
 
 EXP_NAME = "simple_masking"
 SPLITS_DIR = 'splits'
-NUM_UNKNOWN_FRACTION = 0.25
+NUM_UNKNOWN_FRACTION = 0.01
 MASK_COUNT = 64
-NUM_SAMPLES = 500
+NUM_SAMPLES = 1
 
 LR = 0.0001
 WD = 0.0001
 EPOCHS = 10
 PATIENCE = 5
 BATCH_SIZE = 1
-NUM_WORKERS = 4
+NUM_WORKERS =0
 
 train_nodes = np.load(os.path.join(SPLITS_DIR, 'train_nodes.npy')).tolist()
 val_nodes = np.load(os.path.join(SPLITS_DIR, 'val_nodes.npy')).tolist()
 test_nodes = np.load(os.path.join(SPLITS_DIR, 'test_nodes.npy')).tolist()
 unknown_nodes = np.load(os.path.join(SPLITS_DIR, 'unknown_nodes.npy')).tolist()
 node_labels = np.load(os.path.join(SPLITS_DIR, 'node_labels_masked.npy'))  # use this masked labels
+assert len(node_labels.shape) == 1
 with open(os.path.join(SPLITS_DIR, 'labels.txt'), 'r') as f:
     labels = [line.strip() for line in f]
 
 print('test labels:', set(node_labels[test_nodes].tolist()))
+print('train labels:', set(node_labels[train_nodes].tolist()))
+print('val labels:', set(node_labels[val_nodes].tolist()))
 
 max_node = max(max(train_nodes), max(val_nodes), max(test_nodes), max(unknown_nodes))
 node_class = np.zeros((max_node + 1, len(labels)))
@@ -45,7 +48,13 @@ for n in range(max_node + 1):
     else:
         node_class[n, :] = np.ones(len(labels)) / len(labels)
 
+assert np.all(node_class[test_nodes] == 1/4)
+assert np.all(node_class[unknown_nodes] == 1/4)
+
+
 data = pd.read_csv(os.path.join(SPLITS_DIR, 'edges_data.csv'))
+
+print('Edge df shape: ', data.shape)
 
 device = torch.device("cuda:0")
 
@@ -61,45 +70,54 @@ train_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, val_
 val_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, val_nodes, None,
                                   split='val', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
 
-train_loader = DataListLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
-val_loader = DataListLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
+print('Len val dataset: ', len(val_dataset) * MASK_COUNT, len(val_nodes))
+
+train_loader = DataListLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS) # ok
+val_loader = DataListLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS) # ok
 
 num_features = node_class.shape[1]
+print('Num features: ', num_features)
+assert num_features == 4
 model = SingleDeviceWrapper(TAGConvModel(num_features=num_features, num_classes=len(labels)).to(device), device)
 
 
 def evaluate(model, loader, use_amp=True):
-    model.eval()
+    model.eval() # ok
     y_true, y_pred = [], []
-    with torch.no_grad():
+    with torch.no_grad(): # ok
         for batch in tqdm(loader, desc='Eval', leave=False):
-            with torch.amp.autocast('cuda', enabled=use_amp):
-                logits, batch_data = model(batch)
+            with torch.amp.autocast('cuda', enabled=use_amp): # ok
+                logits, batch_data = model(batch) # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< isolated val/test nodes can be in graph
                 predict_mask = batch_data.predict_mask
+                print('Eval predict mask shape: ', predict_mask.shape, logits[predict_mask].shape)
             preds = torch.argmax(logits[predict_mask], dim=-1).cpu().tolist()
             trues = batch_data.y[predict_mask].cpu().tolist()
+            assert -1 not in batch_data.y[predict_mask].cpu()
             y_pred.extend(preds)
             y_true.extend(trues)
     return f1_score(y_true, y_pred, average='macro'), y_true, y_pred
 
 
 class_counts = [sum(1 for n in train_nodes if node_labels[n] == c) for c in range(len(labels))]
+print('Class counts: ', class_counts)
 class_weights = torch.tensor([max(class_counts) / c for c in class_counts], dtype=torch.float).to(device)
+print('Class weights: ', class_weights)
 
-criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
-optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WD)
-scheduler = StepLR(optimizer, step_size=50, gamma=0.95)
-scaler = torch.amp.GradScaler(device)
+
+criterion = torch.nn.CrossEntropyLoss(weight=class_weights) # ok
+optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WD) # ok
+scheduler = StepLR(optimizer, step_size=50, gamma=0.95) # ok
+scaler = torch.amp.GradScaler(device) # ok
 use_amp = device.type == 'cuda'
 
-best_val_f1, patience_counter, best_state = 0.0, 0, None
+best_val_f1, patience_counter, best_state = 0.0, 0, None # ok
 
 for epoch in range(1, EPOCHS + 1):
     if patience_counter >= PATIENCE:
         print(f"Early stopping at epoch {epoch-1}")
         break
 
-    model.train()
+    model.train() # ok
     losses = []
     loop = tqdm(train_loader, desc=f'Epoch {epoch}', leave=False)
     for batch_idx, batch in enumerate(loop):
@@ -107,7 +125,10 @@ for epoch in range(1, EPOCHS + 1):
         with torch.amp.autocast('cuda', enabled=use_amp):
             logits, batch_data = model(batch)
             predict_mask = batch_data.predict_mask
-            masked_node_ids = batch_data.masked_node_ids
+            masked_node_ids = batch_data.masked_node_ids # useless here
+            print('Train predict mask shape: ', predict_mask.shape)
+            # print(masked_node_ids.shape)
+            assert -1 not in batch_data.y[predict_mask]
             loss = criterion(logits[predict_mask], batch_data.y[predict_mask])
         scaler.scale(loss).backward()
         scaler.step(optimizer)

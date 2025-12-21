@@ -10,11 +10,13 @@ SUBMISSION_PATH = 'submissions/simple_masking.csv'
 
 with open(os.path.join(SPLITS_DIR, 'test_ground_truth.pkl'), 'rb') as f:
     data = pickle.load(f)
-    gt_node_ids = data['node_ids']
-    gt_labels = data['true_labels']
-    label_names = data['label_names']
+    gt_node_ids = data['node_ids'] # test nodes
+    gt_labels = data['true_labels'] # test node labels
+    label_names = data['label_names'] # 4 labels name
 
-gt_node_set = set(gt_node_ids)
+assert not -1 in gt_labels
+
+gt_node_set = list(gt_node_ids) # set(gt_node_ids)
 gt_node_to_label = {nid: lbl for nid, lbl in zip(gt_node_ids, gt_labels)}
 
 df = pd.read_csv(SUBMISSION_PATH)
@@ -22,6 +24,8 @@ node_ids = df['node_id'].values
 predictions = df['predicted_label'].values
 label_to_idx = {name: i for i, name in enumerate(label_names)}
 node_to_pred = {nid: pred for nid, pred in zip(node_ids, predictions)}
+
+assert len(node_to_pred) == len(gt_node_to_label)
 
 assert set(gt_node_to_label.keys()) == set(node_to_pred.keys())
 
