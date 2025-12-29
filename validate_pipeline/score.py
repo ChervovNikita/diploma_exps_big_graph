@@ -6,7 +6,9 @@ from sklearn.metrics import f1_score, classification_report, confusion_matrix
 import os
 
 SPLITS_DIR = 'splits'
-SUBMISSION_PATH = 'submissions/simple_masking.csv'
+SUBMISSION_PATH = os.environ.get('SUBMISSION_PATH')
+assert SUBMISSION_PATH is not None
+SUBMISSION_PATH = os.path.join('submissions', SUBMISSION_PATH)
 
 with open(os.path.join(SPLITS_DIR, 'test_ground_truth.pkl'), 'rb') as f:
     data = pickle.load(f)

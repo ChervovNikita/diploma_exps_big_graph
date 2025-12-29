@@ -13,9 +13,24 @@ import pickle
 import os
 from common import MaskedGraphDataset, TAGConvModel, SingleDeviceWrapper
 
+RANDOM_SEED = os.environ.get('RANDOM_SEED')
+assert RANDOM_SEED is not None
+RANDOM_SEED = int(RANDOM_SEED)
 
-EXP_NAME = "simple_masking"
-SPLITS_DIR = 'splits'
+random.seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
+torch.manual_seed(RANDOM_SEED)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(RANDOM_SEED)
+    torch.cuda.manual_seed_all(RANDOM_SEED)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
+
+EXP_NAME = os.environ.get('EXP_NAME')
+assert EXP_NAME is not None
+
+SPLITS_DIR = os.environ.get('SPLITS_DIR')
 NUM_UNKNOWN_FRACTION = 0.25
 MASK_COUNT = 64
 NUM_SAMPLES = 500
@@ -47,7 +62,7 @@ for n in range(max_node + 1):
 
 data = pd.read_csv(os.path.join(SPLITS_DIR, 'edges_data.csv'))
 
-device = torch.device("cuda:0")
+device = torch.device(os.environ.get('DEVICE', 'cuda:0'))
 
 random.seed(42)
 unknown_nodes_shuffled = unknown_nodes.copy()
@@ -90,7 +105,7 @@ criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WD)
 scheduler = StepLR(optimizer, step_size=50, gamma=0.95)
 scaler = torch.amp.GradScaler(device)
-use_amp = device.type == 'cuda'
+use_amp = False #  device.type == 'cuda'
 
 best_val_f1, patience_counter, best_state = 0.0, 0, None
 

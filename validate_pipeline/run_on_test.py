@@ -14,10 +14,25 @@ import os
 from common import MaskedGraphDataset, TAGConvModel, SingleDeviceWrapper
 
 
-EXP_NAME = "simple_masking"
+RANDOM_SEED = os.environ.get('RANDOM_SEED')
+assert RANDOM_SEED is not None
+RANDOM_SEED = int(RANDOM_SEED)
+
+random.seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
+torch.manual_seed(RANDOM_SEED)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(RANDOM_SEED)
+    torch.cuda.manual_seed_all(RANDOM_SEED)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
+EXP_NAME = os.environ.get('EXP_NAME')
+assert EXP_NAME is not None
+
 SPLITS_DIR = 'splits'
 NUM_UNKNOWN_FRACTION = 0.25
-MASK_COUNT = 64
+MASK_COUNT = 1
 NUM_SAMPLES = 500
 
 NUM_WORKERS = 4

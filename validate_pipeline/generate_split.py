@@ -5,10 +5,14 @@ from sklearn.model_selection import train_test_split
 import pickle
 import os
 
-RANDOM_SEED = 42
+RANDOM_SEED = os.environ.get('RANDOM_SEED')
+assert RANDOM_SEED is not None
+RANDOM_SEED = int(RANDOM_SEED)
+
 TEST_SIZE = 0.4
 VAL_TEST_RATIO = 0.5
-OUTPUT_DIR = 'splits'
+TYPE='balanced'
+OUTPUT_DIR = f'splits_{TYPE}'
 
 data = pd.read_csv('../CR_real_masks_more_labeled_veritices_agreed.csv')
 data['node_id1'] -= 1
@@ -39,16 +43,44 @@ for _, row in tqdm(df.iterrows(), desc="Processing nodes"):
 known_nodes = sorted(list(set(known_nodes)))
 unknown_nodes = sorted(list(set(unknown_nodes)))
 
-train_nodes, temp_nodes = train_test_split(
-    known_nodes, test_size=TEST_SIZE, random_state=RANDOM_SEED
-)
-val_nodes, test_nodes = train_test_split(
-    temp_nodes, test_size=VAL_TEST_RATIO, random_state=RANDOM_SEED
-)
+if TYPE == 'not_balanced':
+    train_nodes, temp_nodes = train_test_split(
+        known_nodes, test_size=TEST_SIZE, random_state=RANDOM_SEED,
+        # stratify=[node_labels[n] for n in known_nodes]
+    )
+    val_nodes, test_nodes = train_test_split(
+        temp_nodes, test_size=VAL_TEST_RATIO, random_state=RANDOM_SEED,
+        # stratify=[node_labels[n] for n in temp_nodes]
+    )
+else:
+    train_nodes, temp_nodes = train_test_split(
+        known_nodes, test_size=TEST_SIZE, random_state=RANDOM_SEED,
+        stratify=[node_labels[n] for n in known_nodes]
+    )
+    val_nodes, test_nodes = train_test_split(
+        temp_nodes, test_size=VAL_TEST_RATIO, random_state=RANDOM_SEED,
+        stratify=[node_labels[n] for n in temp_nodes]
+    )
+
+for i in range(len(labels)):
+    train_count = sum(1 for n in train_nodes if node_labels[n] == i)
+    val_count = sum(1 for n in val_nodes if node_labels[n] == i)
+    test_count = sum(1 for n in test_nodes if node_labels[n] == i)
+    total_count = train_count + val_count + test_count
+    print(f"Label {labels[i]}: Train={train_count / total_count}, Val={val_count / total_count}, Test={test_count / total_count}")
 
 train_nodes = sorted(train_nodes)
 val_nodes = sorted(val_nodes)
 test_nodes = sorted(test_nodes)
+
+connected_nodes = set()
+for _, row in data.iterrows():
+    connected_nodes.add(row['node_id1'])
+    connected_nodes.add(row['node_id2'])
+
+was_test = len(test_nodes)
+test_nodes = sorted([node for node in test_nodes if node in connected_nodes])
+print(f"Filtered test nodes: {len(test_nodes)} -> {was_test}")
 
 node_labels_masked = node_labels.copy()
 for n in test_nodes:

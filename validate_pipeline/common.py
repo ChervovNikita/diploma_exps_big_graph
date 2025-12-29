@@ -2,6 +2,7 @@ import random
 import torch
 from torch_geometric.data import Dataset, Data, Batch
 from torch_geometric.nn import TAGConv, GraphNorm
+from torch_geometric.utils import to_torch_csr_tensor
 import torch.nn.functional as F
 import numpy as np
 
@@ -103,21 +104,27 @@ class TAGConvModel(torch.nn.Module):
     def forward(self, data):
         x, edge_index, edge_weight = data.x, data.edge_index, data.weight
 
+        num_nodes = x.size(0)
+        adj = to_torch_csr_tensor(edge_index, edge_weight, size=(num_nodes, num_nodes))
+
         x = self.first_linear(x)
 
         x_ = x.clone()
-        x = F.elu(self.conv1(x, edge_index, edge_weight))
+        x = F.elu(self.conv1(x, adj))
         x = x_ + x
         x = self.n1(x)
+        del x_
 
         x_ = x.clone()
-        x = F.elu(self.conv2(x, edge_index, edge_weight))
+        x = F.elu(self.conv2(x, adj))
         x = x_ + x
         x = self.n2(x)
+        del x_
 
         x_ = x.clone()
-        x = F.elu(self.conv3(x, edge_index, edge_weight))
+        x = F.elu(self.conv3(x, adj))
         x = x_ + x
+        del x_, adj
 
         return self.linear(x)
 

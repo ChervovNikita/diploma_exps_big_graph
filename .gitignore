@@ -10,3 +10,4 @@ old
 catboost_dataset/
 catboost_info/
 **/models
+**.eigenvec

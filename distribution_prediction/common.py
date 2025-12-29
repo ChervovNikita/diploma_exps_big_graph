@@ -2,11 +2,13 @@ import random
 import torch
 from torch_geometric.data import Dataset, Data, Batch
 from torch_geometric.nn import TAGConv, GraphNorm
+from torch_sparse import SparseTensor
 import torch.nn.functional as F
 import numpy as np
 import os
 import pandas as pd
 from tqdm import tqdm
+from torch_geometric.utils import to_torch_csr_tensor
 
 
 class MaskedGraphDataset(Dataset):
@@ -101,21 +103,27 @@ class TAGConvModel(torch.nn.Module):
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
 
+        num_nodes = x.size(0)
+        adj = to_torch_csr_tensor(edge_index, size=(num_nodes, num_nodes))
+
         x = self.first_linear(x)
 
         x_ = x.clone()
-        x = F.elu(self.conv1(x, edge_index))
+        x = F.elu(self.conv1(x, adj))
         x = x_ + x
         x = self.n1(x)
+        del x_
 
         x_ = x.clone()
-        x = F.elu(self.conv2(x, edge_index))
+        x = F.elu(self.conv2(x, adj))
         x = x_ + x
         x = self.n2(x)
+        del x_
 
         x_ = x.clone()
-        x = F.elu(self.conv3(x, edge_index))
+        x = F.elu(self.conv3(x, adj))
         x = x_ + x
+        del x_, adj
 
         return self.linear(x)
 
@@ -138,13 +146,15 @@ def fuzzy_f1_score(y_true, y_pred, labels):
     class_f1 = []
 
     y_true = torch.tensor(y_true)
-    y_pred = torch.concat([p[None, :] for p in y_pred]).detach().cpu()
+    y_pred = torch.concat([p for p in y_pred]).detach().cpu()
 
     for i in range(len(labels)):
         precision = torch.minimum(y_true[:, i], y_pred[:, i]).sum() / y_pred[:, i].sum()
         recall = torch.minimum(y_true[:, i], y_pred[:, i]).sum() / y_true[:, i].sum()
         f1 = 2 * precision * recall / (precision + recall)
         class_f1.append(f1)
+    
+    del y_true, y_pred
     return np.mean(class_f1)
 
 
@@ -156,10 +166,12 @@ def evaluate(model, loader, use_amp=True, labels=None):
             with torch.amp.autocast('cuda', enabled=use_amp):
                 logits, batch_data = model(batch)
                 predict_mask = batch_data.predict_mask
-            preds = torch.softmax(logits[predict_mask], dim=-1)
+            preds = torch.softmax(logits[predict_mask], dim=-1).cpu()
             trues = batch_data.y[predict_mask].cpu().tolist()
-            y_pred.extend(preds)
+            y_pred.append(preds)
             y_true.extend(trues)
+            del logits, batch_data, preds
+            torch.cuda.empty_cache()
     return fuzzy_f1_score(y_true, y_pred, labels), y_true, y_pred
 
 
