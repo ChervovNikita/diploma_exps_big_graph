@@ -12,7 +12,7 @@ RANDOM_SEED = int(RANDOM_SEED)
 TEST_SIZE = 0.4
 VAL_TEST_RATIO = 0.5
 TYPE='balanced'
-OUTPUT_DIR = f'splits_{TYPE}'
+OUTPUT_DIR = os.environ.get('SPLITS_DIR', f'splits_{TYPE}')
 
 data = pd.read_csv('../CR_real_masks_more_labeled_veritices_agreed.csv')
 data['node_id1'] -= 1

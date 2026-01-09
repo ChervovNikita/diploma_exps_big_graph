@@ -11,7 +11,7 @@ from sklearn.metrics import f1_score, classification_report
 import random
 import pickle
 import os
-from common import MaskedGraphDataset, TAGConvModel, SingleDeviceWrapper
+from common import MaskedGraphDatasetGraphBased, TAGConvModel, SingleDeviceWrapper
 
 
 RANDOM_SEED = os.environ.get('RANDOM_SEED')
@@ -66,12 +66,12 @@ num_unknown_to_use = int(len(unknown_nodes_shuffled) * NUM_UNKNOWN_FRACTION)
 unknown_nodes_subset = unknown_nodes_shuffled[:num_unknown_to_use]
 
 
-test_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, None, test_nodes,
+test_dataset = MaskedGraphDatasetGraphBased(data, unknown_nodes_subset, train_nodes, None, test_nodes,
                                   split='test', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
 
 test_loader = DataListLoader(test_dataset, batch_size=1, shuffle=False, num_workers=NUM_WORKERS)
 
-num_features = node_class.shape[1]
+num_features = 5 * node_class.shape[1] + node_class.shape[1]
 model = TAGConvModel(num_features=num_features, num_classes=len(labels)).to(device)
 model.load_state_dict(torch.load(f'checkpoints/{EXP_NAME}_best.pt'))
 model = SingleDeviceWrapper(model, device)
