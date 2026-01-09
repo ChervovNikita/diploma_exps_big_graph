@@ -11,7 +11,7 @@ from sklearn.metrics import f1_score, classification_report
 import random
 import pickle
 import os
-from common import MaskedGraphDataset, TAGConvModel, SingleDeviceWrapper
+from common import MaskedGraphDataset, TAGConvModelTABM, SingleDeviceWrapper
 
 
 RANDOM_SEED = os.environ.get('RANDOM_SEED')
@@ -30,12 +30,12 @@ torch.backends.cudnn.benchmark = False
 EXP_NAME = os.environ.get('EXP_NAME')
 assert EXP_NAME is not None
 
-SPLITS_DIR = 'splits'
-NUM_UNKNOWN_FRACTION = 1.0
+SPLITS_DIR = os.environ.get('SPLITS_DIR')
+NUM_UNKNOWN_FRACTION = 0.05
 MASK_COUNT = 1
 NUM_SAMPLES = 500
-
 NUM_WORKERS = 4
+TABM_INITS = 2
 
 train_nodes = np.load(os.path.join(SPLITS_DIR, 'train_nodes.npy')).tolist()
 val_nodes = np.load(os.path.join(SPLITS_DIR, 'val_nodes.npy')).tolist()
@@ -72,7 +72,7 @@ test_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, None,
 test_loader = DataListLoader(test_dataset, batch_size=1, shuffle=False, num_workers=NUM_WORKERS)
 
 num_features = node_class.shape[1]
-model = TAGConvModel(num_features=num_features, num_classes=len(labels)).to(device)
+model = TAGConvModelTABM(num_features=num_features, num_classes=len(labels)).to(device)
 model.load_state_dict(torch.load(f'checkpoints/{EXP_NAME}_best.pt'))
 model = SingleDeviceWrapper(model, device)
 
@@ -83,10 +83,19 @@ def generate_submission(model, loader, output_path, use_amp=True):
     all_predictions = []
     with torch.no_grad():
         for batch in tqdm(loader, desc='Generating submission', leave=False):
-            with torch.amp.autocast('cuda', enabled=use_amp):
-                logits, batch_data = model(batch)
-                predict_mask = batch_data.predict_mask
-                masked_node_ids = batch_data.masked_node_ids
+            logits = None
+            for tabm_seed in range(TABM_INITS):
+                with torch.amp.autocast('cuda', enabled=use_amp):
+                    logits_now, batch_data = model(batch, tabm_seed=tabm_seed)
+                    if logits is None:
+                        logits = logits_now
+                    else:
+                        logits += logits_now
+                    
+                    predict_mask = batch_data.predict_mask
+                    masked_node_ids = batch_data.masked_node_ids
+
+            logits /= TABM_INITS
 
             preds = torch.argmax(logits[predict_mask], dim=-1).cpu().tolist()
             node_ids = masked_node_ids.cpu().tolist()

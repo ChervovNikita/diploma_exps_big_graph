@@ -5,7 +5,7 @@ import pickle
 from sklearn.metrics import f1_score, classification_report, confusion_matrix
 import os
 
-SPLITS_DIR = 'splits'
+SPLITS_DIR = os.environ.get('SPLITS_DIR')
 SUBMISSION_PATH = os.environ.get('SUBMISSION_PATH')
 assert SUBMISSION_PATH is not None
 SUBMISSION_PATH = os.path.join('submissions', SUBMISSION_PATH)
