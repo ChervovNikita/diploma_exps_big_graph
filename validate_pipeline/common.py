@@ -90,46 +90,127 @@ class MaskedGraphDataset(Dataset):
         )
 
 
-def compute_graph_based_features(sorted_nodes, subgraph_edges, node_class, num_classes):
-    num_nodes = len(sorted_nodes)
-    node_mapping = {node: i for i, node in enumerate(sorted_nodes)}
+# def compute_graph_based_features(sorted_nodes, subgraph_edges, node_class, num_classes):
+#     num_nodes = len(sorted_nodes)
+#     node_mapping = {node: i for i, node in enumerate(sorted_nodes)}
 
-    # for n in sorted_nodes:
-    #     print(node_class[n])
-    #     print(np.max(node_class[n]))
-    #     print(np.argmax(node_class[n]))
+#     # for n in sorted_nodes:
+#     #     print(node_class[n])
+#     #     print(np.max(node_class[n]))
+#     #     print(np.argmax(node_class[n]))
 
-    node_labels = np.array([
-        torch.argmax(node_class[n]) if torch.max(node_class[n]) > 0.5 else -1
-        for n in sorted_nodes
-    ])
+#     node_labels = np.array([
+#         torch.argmax(node_class[n]) if torch.max(node_class[n]) > 0.5 else -1
+#         for n in sorted_nodes
+#     ])
     
-    features = np.zeros((num_nodes, 5 * num_classes))
+#     features = np.zeros((num_nodes, 5 * num_classes))
     
-    for _, row in subgraph_edges.iterrows():
-        n1, n2, w = row['node_id1'], row['node_id2'], row['ibd_sum']
-        if n1 in node_mapping and n2 in node_mapping:
-            i, j = node_mapping[n1], node_mapping[n2]
-            if node_labels[j] >= 0:
-                c = node_labels[j]
-                features[i, c] += 1
-                features[i, num_classes + c] += w
-                features[i, 3*num_classes + c] = max(features[i, 3*num_classes + c], w)
-                features[i, 4*num_classes + c] += 1
-            if node_labels[i] >= 0:
-                c = node_labels[i]
-                features[j, c] += 1
-                features[j, num_classes + c] += w
-                features[j, 3*num_classes + c] = max(features[j, 3*num_classes + c], w)
-                features[j, 4*num_classes + c] += 1
+#     for _, row in subgraph_edges.iterrows():
+#         n1, n2, w = row['node_id1'], row['node_id2'], row['ibd_sum']
+#         if n1 in node_mapping and n2 in node_mapping:
+#             i, j = node_mapping[n1], node_mapping[n2]
+#             if node_labels[j] >= 0:
+#                 c = node_labels[j]
+#                 features[i, c] += 1
+#                 features[i, num_classes + c] += w
+#                 features[i, 3*num_classes + c] = max(features[i, 3*num_classes + c], w)
+#                 features[i, 4*num_classes + c] += 1
+#             if node_labels[i] >= 0:
+#                 c = node_labels[i]
+#                 features[j, c] += 1
+#                 features[j, num_classes + c] += w
+#                 features[j, 3*num_classes + c] = max(features[j, 3*num_classes + c], w)
+#                 features[j, 4*num_classes + c] += 1
 
-    for c in range(num_classes):
-        count_col = c
-        sum_col = num_classes + c
-        mask = features[:, count_col] > 0
-        features[mask, sum_col] /= features[mask, count_col]
+#     for c in range(num_classes):
+#         count_col = c
+#         sum_col = num_classes + c
+#         mask = features[:, count_col] > 0
+#         features[mask, sum_col] /= features[mask, count_col]
     
-    return torch.tensor(features, dtype=torch.float)
+#     return torch.tensor(features, dtype=torch.float)
+
+
+def compute_graph_based_features_local(
+    edge_index: torch.Tensor,      # [2, E] local indices, directed or undirected
+    edge_w: torch.Tensor,          # [E] W(i,j) = ibd_sum for each directed edge
+    edge_k: torch.Tensor | None,   # [E] K_ij = ibd_n for each directed edge (or None -> ones)
+    x_masked: torch.Tensor,        # [N, C] one-hot for labeled, uniform for unlabeled/masked
+    num_classes: int,
+    labeled_thr: float = 0.5,      # >0.5 reliably separates one-hot(1) from uniform(1/C)
+    eps: float = 1e-12,
+) -> torch.Tensor:
+    """
+    Implements GENLINK graph-based features (Eq. 4-7):
+      [n_i,c, mean_w_i,c, std_w_i,c, max_w_i,c, IBD_i,c] for c=1..C  => shape [N, 5C]
+    Unlabeled nodes never contribute to neighbors' features.
+    """
+    device = x_masked.device
+    N = x_masked.size(0)
+    C = num_classes
+
+    # Determine which nodes are labeled (one-hot) vs unlabeled (uniform/masked)
+    maxp, arg = x_masked.max(dim=1)
+    lbl = torch.where(maxp > labeled_thr, arg, torch.full_like(arg, -1))  # -1 unlabeled
+
+    src, dst = edge_index[0], edge_index[1]
+    dst_lbl = lbl[dst]
+    valid = dst_lbl >= 0
+
+    src = src[valid]
+    c = dst_lbl[valid]
+    w = edge_w[valid].to(torch.float32)
+
+    if edge_k is None:
+        k = torch.ones_like(w)
+    else:
+        k = edge_k[valid].to(torch.float32)
+
+    # Flatten (node, class) -> linear index
+    lin = src * C + c  # [E_valid]
+
+    flat_cnt  = torch.zeros(N * C, device=device, dtype=torch.float32)
+    flat_sumw = torch.zeros_like(flat_cnt)
+    flat_sumw2 = torch.zeros_like(flat_cnt)
+    flat_sumk = torch.zeros_like(flat_cnt)
+
+    ones = torch.ones_like(w)
+    flat_cnt.index_add_(0, lin, ones)
+    flat_sumw.index_add_(0, lin, w)
+    flat_sumw2.index_add_(0, lin, w * w)
+    flat_sumk.index_add_(0, lin, k)
+
+    # max_w via scatter_reduce (torch>=2.0); fallback to a (slower) loop otherwise
+    flat_maxw = torch.full((N * C,), float("-inf"), device=device, dtype=torch.float32)
+    if hasattr(flat_maxw, "scatter_reduce_"):
+        flat_maxw.scatter_reduce_(0, lin, w, reduce="amax", include_self=True)
+        flat_maxw[flat_maxw == float("-inf")] = 0.0
+    else:
+        flat_maxw.fill_(0.0)
+        for u in torch.unique(lin):
+            m = (lin == u)
+            flat_maxw[u] = torch.max(w[m])
+
+    cnt  = flat_cnt.view(N, C)
+    sumw = flat_sumw.view(N, C)
+    sumw2 = flat_sumw2.view(N, C)
+    maxw = flat_maxw.view(N, C)
+    sumk = flat_sumk.view(N, C)
+
+    mean = torch.zeros_like(sumw)
+    std = torch.zeros_like(sumw)
+
+    mask = cnt > 0
+    mean[mask] = sumw[mask] / (cnt[mask] + eps)
+    var = torch.zeros_like(sumw2)
+    var[mask] = sumw2[mask] / (cnt[mask] + eps) - mean[mask] * mean[mask]
+    var = torch.clamp(var, min=0.0)
+    std[mask] = torch.sqrt(var[mask] + eps)
+
+    # Order exactly as Eq. (7): counts, mean, std, max, IBD-sum(Kij)
+    feats = torch.cat([cnt, mean, std, maxw, sumk], dim=1)  # [N, 5C]
+    return feats
 
 class MaskedGraphDatasetGraphBased(Dataset):
     def __init__(self, data_df, unknown_nodes_subset, train_nodes, val_nodes, test_nodes, split, mask_count, num_samples, node_classes):
@@ -187,10 +268,24 @@ class MaskedGraphDatasetGraphBased(Dataset):
         predict_mask = torch.zeros(len(sorted_nodes), dtype=torch.bool)
         predict_mask[mask_indices] = True
 
+        ibd_sum = torch.tensor(subgraph_edges["ibd_sum"].values, dtype=torch.float32)
+        ibd_n   = torch.tensor(subgraph_edges["ibd_n"].values,   dtype=torch.float32)
+
         node_features_masked = node_features.clone()
         node_features_masked[predict_mask] = torch.ones(self.node_classes.shape[1]) / self.node_classes.shape[1]
 
-        node_features_graph_based = compute_graph_based_features(list(range(len(sorted_nodes))), subgraph_edges, node_features_masked, self.node_classes.shape[1])
+        edge_w = torch.cat([ibd_sum, ibd_sum], dim=0)
+        edge_k = torch.cat([ibd_n,   ibd_n],   dim=0)
+        C = self.node_classes.shape[1]
+
+        # node_features_graph_based = compute_graph_based_features(list(range(len(sorted_nodes))), subgraph_edges, node_features_masked, self.node_classes.shape[1])
+        node_features_graph_based = compute_graph_based_features_local(
+            edge_index=edge_index,
+            edge_w=edge_w,
+            edge_k=edge_k,
+            x_masked=node_features_masked,
+            num_classes=C,
+        )
 
         node_features = torch.cat([node_features_graph_based, node_features_masked], dim=1)
 
@@ -257,16 +352,58 @@ class TAGConvModel(torch.nn.Module):
         return self.linear(x)
 
 
+class TAGConvModelTABM(torch.nn.Module):
+    def __init__(self, num_features, num_classes, hidden_dim=512, tabm_inits=2):
+        super().__init__()
+        self.first_linear = torch.nn.Linear(num_features, hidden_dim)
+
+        self.tabm_inits = tabm_inits
+        self.rs = torch.nn.ParameterList([
+            torch.nn.Parameter(torch.randn(hidden_dim).to("cuda:1")) for _ in range(tabm_inits)
+        ])
+
+        self.conv1 = TAGConv(hidden_dim, hidden_dim)
+        self.conv2 = TAGConv(hidden_dim, hidden_dim)
+        self.conv3 = TAGConv(hidden_dim, hidden_dim)
+        self.n1 = GraphNorm(hidden_dim)
+        self.n2 = GraphNorm(hidden_dim)
+        self.linear = torch.nn.Linear(hidden_dim, num_classes)
+
+    def forward(self, data, tabm_seed=0):
+        x, edge_index, edge_weight = data.x, data.edge_index, data.weight
+        x = self.first_linear(x)
+        x = x * self.rs[tabm_seed]
+
+        num_nodes = x.size(0)
+        adj = to_torch_csr_tensor(edge_index, edge_weight, size=(num_nodes, num_nodes))
+        
+        x_ = x.clone()
+        x = F.elu(self.conv1(x, adj))
+        x = x_ + x
+        x = self.n1(x)
+        
+        x_ = x.clone()
+        x = F.elu(self.conv2(x, adj))
+        x = x_ + x
+        x = self.n2(x)
+        
+        x_ = x.clone()
+        x = F.elu(self.conv3(x, adj))
+        x = x_ + x
+
+        return self.linear(x)
+
+
 class SingleDeviceWrapper(torch.nn.Module):  # so one and multi gpu have the same interface
     def __init__(self, module, device):
         super().__init__()
         self.module = module
         self.device = device
 
-    def forward(self, data_list):
+    def forward(self, data_list, **kwargs):
         if isinstance(data_list, list):
             batch = Batch.from_data_list(data_list).to(self.device, non_blocking=True)
         else:
             batch = data_list.to(self.device, non_blocking=True)
-        return self.module(batch), batch
+        return self.module(batch, **kwargs), batch
 
