@@ -72,7 +72,7 @@ test_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, None,
 test_loader = DataListLoader(test_dataset, batch_size=1, shuffle=False, num_workers=NUM_WORKERS)
 
 num_features = node_class.shape[1]
-model = TAGConvModelTABM(num_features=num_features, num_classes=len(labels)).to(device)
+model = TAGConvModelTABM(num_features=num_features, num_classes=len(labels), tabm_inits=TABM_INITS).to(device)
 model.load_state_dict(torch.load(f'checkpoints/{EXP_NAME}_best.pt'))
 model = SingleDeviceWrapper(model, device)
 

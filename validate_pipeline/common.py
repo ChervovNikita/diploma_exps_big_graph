@@ -72,7 +72,9 @@ class MaskedGraphDataset(Dataset):
             y = None
         
         ibd = subgraph_edges['ibd_sum'].values
+        ibd_n = subgraph_edges['ibd_n'].values
         edge_weights = torch.tensor(list(ibd) + list(ibd), dtype=torch.float)
+        edge_weights_n = torch.tensor(list(ibd_n) + list(ibd_n), dtype=torch.float)
 
         # masked_node_ids = torch.tensor([mask_nodes[mask_indices.index(i)] for i in mask_indices], dtype=torch.long)
         mask_nodes_filtered = [n for n in mask_nodes if n in node_mapping]
@@ -84,52 +86,11 @@ class MaskedGraphDataset(Dataset):
             edge_index=edge_index,
             y=y,
             weight=edge_weights,
+            weight_n=edge_weights_n,
             num_classes=self.node_classes.shape[1],
             predict_mask=predict_mask,
             masked_node_ids=masked_node_ids
         )
-
-
-# def compute_graph_based_features(sorted_nodes, subgraph_edges, node_class, num_classes):
-#     num_nodes = len(sorted_nodes)
-#     node_mapping = {node: i for i, node in enumerate(sorted_nodes)}
-
-#     # for n in sorted_nodes:
-#     #     print(node_class[n])
-#     #     print(np.max(node_class[n]))
-#     #     print(np.argmax(node_class[n]))
-
-#     node_labels = np.array([
-#         torch.argmax(node_class[n]) if torch.max(node_class[n]) > 0.5 else -1
-#         for n in sorted_nodes
-#     ])
-    
-#     features = np.zeros((num_nodes, 5 * num_classes))
-    
-#     for _, row in subgraph_edges.iterrows():
-#         n1, n2, w = row['node_id1'], row['node_id2'], row['ibd_sum']
-#         if n1 in node_mapping and n2 in node_mapping:
-#             i, j = node_mapping[n1], node_mapping[n2]
-#             if node_labels[j] >= 0:
-#                 c = node_labels[j]
-#                 features[i, c] += 1
-#                 features[i, num_classes + c] += w
-#                 features[i, 3*num_classes + c] = max(features[i, 3*num_classes + c], w)
-#                 features[i, 4*num_classes + c] += 1
-#             if node_labels[i] >= 0:
-#                 c = node_labels[i]
-#                 features[j, c] += 1
-#                 features[j, num_classes + c] += w
-#                 features[j, 3*num_classes + c] = max(features[j, 3*num_classes + c], w)
-#                 features[j, 4*num_classes + c] += 1
-
-#     for c in range(num_classes):
-#         count_col = c
-#         sum_col = num_classes + c
-#         mask = features[:, count_col] > 0
-#         features[mask, sum_col] /= features[mask, count_col]
-    
-#     return torch.tensor(features, dtype=torch.float)
 
 
 def compute_graph_based_features_local(
@@ -353,7 +314,7 @@ class TAGConvModel(torch.nn.Module):
 
 
 class TAGConvModelTABM(torch.nn.Module):
-    def __init__(self, num_features, num_classes, hidden_dim=512, tabm_inits=2):
+    def __init__(self, num_features, num_classes, hidden_dim=512, tabm_inits=None):
         super().__init__()
         self.first_linear = torch.nn.Linear(num_features, hidden_dim)
 
@@ -390,6 +351,65 @@ class TAGConvModelTABM(torch.nn.Module):
         x_ = x.clone()
         x = F.elu(self.conv3(x, adj))
         x = x_ + x
+
+        return self.linear(x)
+
+
+class WeightProcessor(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.mlp = torch.nn.Sequential(
+            torch.nn.Linear(5 + 1, 16),
+            torch.nn.ReLU(),
+            torch.nn.Linear(16, 1),
+            torch.nn.Sigmoid(),
+        )
+    
+    def forward(self, edge_weight, edge_weight_n):
+        edge_weight_n = torch.minimum(edge_weight_n, torch.tensor(4.0))
+        edge_weight_n_one_hot = F.one_hot(edge_weight_n.long(), num_classes=5)
+        feats = torch.cat([torch.log1p(edge_weight)[:, None], edge_weight_n_one_hot], dim=-1)
+        return self.mlp(feats)
+
+
+class TAGConvModelTrainableWeights(torch.nn.Module):
+    def __init__(self, num_features, num_classes, hidden_dim=512):
+        super().__init__()
+        self.first_linear = torch.nn.Linear(num_features, hidden_dim)
+        self.conv1 = TAGConv(hidden_dim, hidden_dim)
+        self.conv2 = TAGConv(hidden_dim, hidden_dim)
+        self.conv3 = TAGConv(hidden_dim, hidden_dim)
+        self.n1 = GraphNorm(hidden_dim)
+        self.n2 = GraphNorm(hidden_dim)
+        self.linear = torch.nn.Linear(hidden_dim, num_classes)
+        self.weight_processor = WeightProcessor()
+
+    def forward(self, data):
+        x, edge_index, edge_weight, edge_weight_n = data.x, data.edge_index, data.weight, data.weight_n
+
+        edge_weight = self.weight_processor(edge_weight, edge_weight_n).squeeze(-1)
+
+        num_nodes = x.size(0)
+        adj = to_torch_csr_tensor(edge_index, edge_weight, size=(num_nodes, num_nodes))
+
+        x = self.first_linear(x)
+
+        x_ = x.clone()
+        x = F.elu(self.conv1(x, adj))
+        x = x_ + x
+        x = self.n1(x)
+        del x_
+
+        x_ = x.clone()
+        x = F.elu(self.conv2(x, adj))
+        x = x_ + x
+        x = self.n2(x)
+        del x_
+
+        x_ = x.clone()
+        x = F.elu(self.conv3(x, adj))
+        x = x_ + x
+        del x_, adj
 
         return self.linear(x)
 
