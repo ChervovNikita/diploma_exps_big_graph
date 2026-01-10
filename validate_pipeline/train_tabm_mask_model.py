@@ -82,7 +82,7 @@ val_loader = DataListLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, n
 
 num_features = node_class.shape[1]
 model = SingleDeviceWrapper(
-    TAGConvModelTABM(num_features=num_features, num_classes=len(labels), tabm_inits=TABM_INITS).to(device), device
+    TAGConvModelTABM(num_features=num_features, num_classes=len(labels), tabm_inits=TABM_INITS, device=device).to(device), device
 )
 
 

@@ -314,13 +314,13 @@ class TAGConvModel(torch.nn.Module):
 
 
 class TAGConvModelTABM(torch.nn.Module):
-    def __init__(self, num_features, num_classes, hidden_dim=512, tabm_inits=None):
+    def __init__(self, num_features, num_classes, hidden_dim=512, tabm_inits=None, device=None):
         super().__init__()
         self.first_linear = torch.nn.Linear(num_features, hidden_dim)
 
         self.tabm_inits = tabm_inits
         self.rs = torch.nn.ParameterList([
-            torch.nn.Parameter(torch.randn(hidden_dim).to("cuda:1")) for _ in range(tabm_inits)
+            torch.nn.Parameter(torch.randn(hidden_dim).to(device)) for _ in range(tabm_inits)
         ])
 
         self.conv1 = TAGConv(hidden_dim, hidden_dim)
