@@ -2,20 +2,19 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import torch
-import torch.nn.functional as F
-from torch_geometric.data import Dataset, Data, Batch
 from torch_geometric.loader import DataListLoader
-from torch_geometric.nn import TAGConv, GraphNorm, DataParallel as GeoDataParallel
 from torch.optim.lr_scheduler import StepLR
-from sklearn.metrics import f1_score, classification_report
 import random
-import pickle
 import os
-from common import MaskedGraphDataset, TAGConvModelTrainableWeights, SingleDeviceWrapper
+from common import TripletGraphDataset, compute_triplet_embeddings, knn_predict, TAGConvModelEmbeddings, SingleDeviceWrapper, SemiHardTripletLoss
+from sklearn.metrics import f1_score, accuracy_score
+import joblib
+
 
 RANDOM_SEED = os.environ.get('RANDOM_SEED')
 assert RANDOM_SEED is not None
 RANDOM_SEED = int(RANDOM_SEED)
+
 
 random.seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
@@ -31,13 +30,13 @@ EXP_NAME = os.environ.get('EXP_NAME')
 assert EXP_NAME is not None
 
 SPLITS_DIR = os.environ.get('SPLITS_DIR')
-NUM_UNKNOWN_FRACTION = 0.25
+NUM_UNKNOWN_FRACTION = 1.0
 MASK_COUNT = 64
 NUM_SAMPLES = 500
 
 LR = 0.0001
 WD = 0.0001
-EPOCHS = 1
+EPOCHS = 10
 PATIENCE = 5
 BATCH_SIZE = 1
 NUM_WORKERS = 4
@@ -70,44 +69,52 @@ random.shuffle(unknown_nodes_shuffled)
 num_unknown_to_use = int(len(unknown_nodes_shuffled) * NUM_UNKNOWN_FRACTION)
 unknown_nodes_subset = unknown_nodes_shuffled[:num_unknown_to_use]
 
+train_nodes_by_class = {c: [] for c in range(len(labels))}
+for n in train_nodes:
+    if node_labels[n] >= 0:
+        train_nodes_by_class[node_labels[n]].append(n)
 
-train_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, val_nodes, None,
-                                    split='train', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
-val_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, val_nodes, None,
-                                  split='val', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
+train_dataset = TripletGraphDataset(data, unknown_nodes_subset, train_nodes, val_nodes, None,
+                                    train_nodes_by_class, split='train', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
+train_eval_dataset = TripletGraphDataset(data, unknown_nodes_subset, train_nodes, val_nodes, None,
+                                    train_nodes_by_class, split='train_eval', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
+val_dataset = TripletGraphDataset(data, unknown_nodes_subset, train_nodes, val_nodes, None,
+                                  train_nodes_by_class, split='val', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
 
 train_loader = DataListLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
+train_eval_loader = DataListLoader(train_eval_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
 val_loader = DataListLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
 
 num_features = node_class.shape[1]
-model = SingleDeviceWrapper(TAGConvModelTrainableWeights(num_features=num_features, num_classes=len(labels)).to(device), device)
+model = SingleDeviceWrapper(TAGConvModelEmbeddings(num_classes=len(labels)).to(device), device)
 
 
-def evaluate(model, loader, use_amp=True):
-    model.eval()
-    y_true, y_pred = [], []
-    with torch.no_grad():
-        for batch in tqdm(loader, desc='Eval', leave=False):
-            with torch.amp.autocast('cuda', enabled=use_amp):
-                logits, batch_data = model(batch)
-                predict_mask = batch_data.predict_mask
-            preds = torch.argmax(logits[predict_mask], dim=-1).cpu().tolist()
-            trues = batch_data.y[predict_mask].cpu().tolist()
-            y_pred.extend(preds)
-            y_true.extend(trues)
-    return f1_score(y_true, y_pred, average='macro'), y_true, y_pred
+def evaluate_knn(model, train_loader, eval_loader, k_values=[5, 10, 15, 20], weighted=False):
+    train_emb, train_y = compute_triplet_embeddings(model, train_loader)
+    eval_emb, eval_y = compute_triplet_embeddings(model, eval_loader)
+    
+    best_f1, best_k = 0.0, k_values[0]
+    
+    for k in k_values:
+        y_pred = knn_predict(train_emb, train_y, eval_emb, k=k, weighted=weighted)
+        f1_macro = f1_score(eval_y.tolist(), y_pred, average='macro')
+
+        if f1_macro > best_f1:
+            best_f1 = f1_macro
+            best_k = k
+
+    return best_f1, best_k
 
 
 class_counts = [sum(1 for n in train_nodes if node_labels[n] == c) for c in range(len(labels))]
 class_weights = torch.tensor([max(class_counts) / c for c in class_counts], dtype=torch.float).to(device)
 
-criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+criterion = SemiHardTripletLoss()
 optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WD)
 scheduler = StepLR(optimizer, step_size=50, gamma=0.95)
 scaler = torch.amp.GradScaler(device)
-use_amp = False #  device.type == 'cuda'
 
-best_val_f1, patience_counter, best_state = 0.0, 0, None
+best_val_f1, best_val_k, best_val_weighted, patience_counter, best_state = 0.0, 10, False, 0, None
 
 for epoch in range(1, EPOCHS + 1):
     if patience_counter >= PATIENCE:
@@ -119,11 +126,10 @@ for epoch in range(1, EPOCHS + 1):
     loop = tqdm(train_loader, desc=f'Epoch {epoch}', leave=False)
     for batch_idx, batch in enumerate(loop):
         optimizer.zero_grad(set_to_none=True)
-        with torch.amp.autocast('cuda', enabled=use_amp):
-            logits, batch_data = model(batch)
-            predict_mask = batch_data.predict_mask
-            masked_node_ids = batch_data.masked_node_ids
-            loss = criterion(logits[predict_mask], batch_data.y[predict_mask])
+        logits, batch_data = model(batch)
+        predict_mask = batch_data.predict_mask
+        masked_node_ids = batch_data.masked_node_ids
+        loss = criterion(logits[predict_mask], batch_data.y[predict_mask])
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
@@ -133,13 +139,26 @@ for epoch in range(1, EPOCHS + 1):
             loop.set_postfix(loss=f"{loss.item():.4f}")
             torch.cuda.empty_cache()
 
-    val_f1, _, _ = evaluate(model, val_loader, use_amp)
+    is_weighted = False
+    val_f1_unweighted, val_k_unweighted = evaluate_knn(model, train_eval_loader, val_loader, weighted=False)
+    val_f1_weighted, val_k_weighted = evaluate_knn(model, train_eval_loader, val_loader, weighted=True)
+
+    if val_f1_weighted > val_f1_unweighted:
+        is_weighted = True
+        val_f1 = val_f1_weighted
+        val_k = val_k_weighted
+    else:
+        is_weighted = False
+        val_f1 = val_f1_unweighted
+        val_k = val_k_unweighted
+
     if val_f1 > best_val_f1:
-        best_val_f1, patience_counter = val_f1, 0
+        best_val_f1, best_val_k, best_val_weighted, patience_counter = val_f1, val_k, is_weighted, 0
         to_save = getattr(model, 'module', model)
         best_state = {k: v.cpu().clone() for k, v in to_save.state_dict().items()}
         torch.save(best_state, f'checkpoints/{EXP_NAME}_best.pt')
-        print(f"[Epoch {epoch}] val_f1={best_val_f1:.4f} ↑ | loss={np.mean(losses):.4f}")
+        joblib.dump({'best_val_f1': best_val_f1, 'best_val_k': best_val_k, 'best_val_weighted': best_val_weighted}, f'checkpoints/{EXP_NAME}_best.pkl')        
+        print(f"[Epoch {epoch}] val_f1={best_val_f1:.4f} ↑ | val_k={best_val_k} | val_weighted={best_val_weighted} | loss={np.mean(losses):.4f}")
     else:
         patience_counter += 1
-        print(f"[Epoch {epoch}] val_f1={val_f1:.4f} | loss={np.mean(losses):.4f} | patience={patience_counter}")
+        print(f"[Epoch {epoch}] val_f1={val_f1:.4f} | val_k={val_k} | val_weighted={is_weighted} | loss={np.mean(losses):.4f} | patience={patience_counter}")
