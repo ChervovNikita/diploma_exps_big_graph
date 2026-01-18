@@ -62,7 +62,7 @@ for n in range(max_node + 1):
 
 data = pd.read_csv(os.path.join(SPLITS_DIR, 'edges_data.csv'))
 
-device = torch.device(os.environ.get('DEVICE', 'cuda:0'))
+device = torch.device(os.environ.get('DEVICE', 'cuda:1'))
 
 random.seed(42)
 unknown_nodes_shuffled = unknown_nodes.copy()

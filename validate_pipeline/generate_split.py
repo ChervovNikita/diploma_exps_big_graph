@@ -14,7 +14,7 @@ VAL_TEST_RATIO = 0.5
 TYPE='balanced'
 OUTPUT_DIR = os.environ.get('SPLITS_DIR', f'splits_{TYPE}')
 
-data = pd.read_csv('../CR_real_masks_more_labeled_veritices_agreed.csv')
+data = pd.read_csv('/disk/10tb/home/shmelev/CR_agreed/CR_real_masks_more_labeled_veritices_agreed.csv')
 data['node_id1'] -= 1
 data['node_id2'] -= 1
 

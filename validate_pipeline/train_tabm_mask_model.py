@@ -41,7 +41,7 @@ EPOCHS = 10
 PATIENCE = 5
 BATCH_SIZE = 1
 NUM_WORKERS = 4
-TABM_INITS = 4
+TABM_INITS = 2
 
 train_nodes = np.load(os.path.join(SPLITS_DIR, 'train_nodes.npy')).tolist()
 val_nodes = np.load(os.path.join(SPLITS_DIR, 'val_nodes.npy')).tolist()
