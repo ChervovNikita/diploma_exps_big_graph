@@ -37,7 +37,7 @@ NUM_SAMPLES = 500
 
 LR = 0.0001
 WD = 0.0001
-EPOCHS = 10
+EPOCHS = 20
 PATIENCE = 5
 BATCH_SIZE = 1
 NUM_WORKERS = 4
@@ -81,28 +81,27 @@ train_loader = DataListLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True
 val_loader = DataListLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
 
 num_features = node_class.shape[1]
-model = SingleDeviceWrapper(
-    TAGConvModelTABM(num_features=num_features, num_classes=len(labels), tabm_inits=TABM_INITS, device=device).to(device), device
-)
+
+model = TAGConvModelTABM(num_features=num_features, num_classes=len(labels), tabm_inits=TABM_INITS, device=device).to(device)
+model = SingleDeviceWrapper(model, device)
 
 
-def evaluate(model, loader, use_amp=True):
+def evaluate(model, loader):
     model.eval()
     y_true, y_pred = [], []
     with torch.no_grad():
         for batch in tqdm(loader, desc='Eval', leave=False):
-            with torch.amp.autocast('cuda', enabled=use_amp):
-                logits = None
-                for tabm_seed in range(TABM_INITS):
-                    logits_now, batch_data = model(batch, tabm_seed=tabm_seed)
-                    if logits is None:
-                        logits = logits_now
-                    else:
-                        logits += logits_now
-                    
-                    predict_mask = batch_data.predict_mask
+            logits = None
+            for tabm_seed in range(TABM_INITS):
+                logits_now, batch_data = model(batch, tabm_seed=tabm_seed)
+                if logits is None:
+                    logits = logits_now
+                else:
+                    logits += logits_now
                 
-                logits /= TABM_INITS
+                predict_mask = batch_data.predict_mask
+            
+            logits /= TABM_INITS
             
             preds = torch.argmax(logits[predict_mask], dim=-1).cpu().tolist()
             trues = batch_data.y[predict_mask].cpu().tolist()
@@ -116,8 +115,6 @@ class_weights = torch.tensor([max(class_counts) / c for c in class_counts], dtyp
 criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WD)
 scheduler = StepLR(optimizer, step_size=50, gamma=0.95)
-scaler = torch.amp.GradScaler(device)
-use_amp = False #  device.type == 'cuda'
 
 best_val_f1, patience_counter, best_state = 0.0, 0, None
 
@@ -131,22 +128,18 @@ for epoch in range(1, EPOCHS + 1):
     loop = tqdm(train_loader, desc=f'Epoch {epoch}', leave=False)
     for batch_idx, batch in enumerate(loop):
         optimizer.zero_grad(set_to_none=True)
+        cur_loss = 0.0
         for tabm_seed in range(TABM_INITS):
-            with torch.amp.autocast('cuda', enabled=use_amp):
-                logits, batch_data = model(batch, tabm_seed=tabm_seed)
-                predict_mask = batch_data.predict_mask
-                masked_node_ids = batch_data.masked_node_ids
-                loss = criterion(logits[predict_mask], batch_data.y[predict_mask])
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-            scheduler.step()
-            losses.append(loss.item())
-        if batch_idx % 50 == 0:
-            loop.set_postfix(loss=f"{loss.item():.4f}")
-            torch.cuda.empty_cache()
+            logits, batch_data = model(batch, tabm_seed=tabm_seed)
+            predict_mask = batch_data.predict_mask
+            loss = criterion(logits[predict_mask], batch_data.y[predict_mask]) / TABM_INITS
+            loss.backward()
+            cur_loss += loss.item()
+        optimizer.step()
+        scheduler.step()
+        losses.append(cur_loss)
 
-    val_f1, _, _ = evaluate(model, val_loader, use_amp)
+    val_f1, _, _ = evaluate(model, val_loader)
     if val_f1 > best_val_f1:
         best_val_f1, patience_counter = val_f1, 0
         to_save = getattr(model, 'module', model)
