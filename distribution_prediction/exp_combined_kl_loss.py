@@ -17,7 +17,7 @@ import os
 NUM_UNKNOWN_FRACTION = 0.05
 EXP_NAME = f'exp_combined_kl_loss_{NUM_UNKNOWN_FRACTION}'
 SPLITS_DIR = 'splits_jews'
-DEVICE = 'cuda:1'
+DEVICE = 'cuda:0'
 HAS_UNKNOWN = False
 
 RANDOM_SEED = os.environ.get('RANDOM_SEED')
