@@ -1,5 +1,6 @@
 import random
 import torch
+from torch import nn
 from torch_geometric.data import Dataset, Data, Batch
 from torch_geometric.nn import TAGConv, GraphNorm
 from torch_geometric.utils import to_torch_csr_tensor
@@ -417,46 +418,79 @@ class TAGConvModel(torch.nn.Module):
         return self.linear(x)
 
 
+class BEBlock(torch.nn.Module):
+    def __init__(self, in_shape, out_shape, is_first, device, tabm_inits):
+        super().__init__()
+
+        self.R = nn.Parameter(torch.empty(tabm_inits, in_shape, device=device))
+        self.S = nn.Parameter(torch.empty(tabm_inits, out_shape, device=device))
+        self.B = nn.Parameter(torch.empty(tabm_inits, out_shape, device=device))
+        self.W = nn.Linear(in_shape, out_shape, bias=False)
+        
+        self.tabm_inits = tabm_inits
+        self.is_first = is_first
+        self._init_weights()
+
+    @torch.no_grad()
+    def _init_weights(self):
+        nn.init.xavier_uniform_(self.W.weight)
+        if self.is_first:
+            self.R.bernoulli_(0.5).mul_(2).sub_(1)
+        else:
+            self.R.fill_(1.0)
+        self.S.fill_(1.0)
+        self.B.zero_()
+
+    def forward(self, x, tabm_seed):
+        x = x * self.R[tabm_seed]
+        x = self.W(x)
+        x = x * self.S[tabm_seed]
+        x = x + self.B[tabm_seed]
+        return x
+
+
 class TAGConvModelTABM(torch.nn.Module):
     def __init__(self, num_features, num_classes, hidden_dim=512, tabm_inits=None, device=None):
         super().__init__()
-        self.first_linear = torch.nn.Linear(num_features, hidden_dim)
-
         self.tabm_inits = tabm_inits
-        self.rs = torch.nn.ParameterList([
-            torch.nn.Parameter(torch.randn(hidden_dim).to(device)) for _ in range(tabm_inits)
-        ])
+
+        bes = [
+            BEBlock(num_features, num_features, is_first=True, device=device, tabm_inits=tabm_inits),
+            BEBlock(num_features, hidden_dim, is_first=False, device=device, tabm_inits=tabm_inits)
+        ]
+        self.lrs = torch.nn.ModuleList(bes)
 
         self.conv1 = TAGConv(hidden_dim, hidden_dim)
         self.conv2 = TAGConv(hidden_dim, hidden_dim)
         self.conv3 = TAGConv(hidden_dim, hidden_dim)
         self.n1 = GraphNorm(hidden_dim)
         self.n2 = GraphNorm(hidden_dim)
-        self.linear = torch.nn.Linear(hidden_dim, num_classes)
+        self.linear = BEBlock(hidden_dim, num_classes, is_first=False, device=device, tabm_inits=tabm_inits)
 
-    def forward(self, data, tabm_seed=0):
+    def forward(self, data, tabm_seed):
         x, edge_index, edge_weight = data.x, data.edge_index, data.weight
-        x = self.first_linear(x)
-        x = x * self.rs[tabm_seed]
+        for be in self.lrs:
+            x = be(x, tabm_seed)
+            x = F.elu(x)
 
         num_nodes = x.size(0)
         adj = to_torch_csr_tensor(edge_index, edge_weight, size=(num_nodes, num_nodes))
         
-        x_ = x.clone()
+        x_ = x
         x = F.elu(self.conv1(x, adj))
         x = x_ + x
         x = self.n1(x)
         
-        x_ = x.clone()
+        x_ = x
         x = F.elu(self.conv2(x, adj))
         x = x_ + x
         x = self.n2(x)
         
-        x_ = x.clone()
+        x_ = x
         x = F.elu(self.conv3(x, adj))
         x = x_ + x
 
-        return self.linear(x)
+        return self.linear(x, tabm_seed)
 
 
 class WeightProcessor(torch.nn.Module):
