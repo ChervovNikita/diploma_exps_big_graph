@@ -418,6 +418,45 @@ class TAGConvModel(torch.nn.Module):
         return self.linear(x)
 
 
+class ArbitaryModel(torch.nn.Module):
+    def __init__(self, num_features, num_classes, conv_layer_type, hidden_dim=512):
+        super().__init__()
+        self.first_linear = torch.nn.Linear(num_features, hidden_dim)
+        self.conv1 = conv_layer_type(hidden_dim, hidden_dim)
+        self.conv2 = conv_layer_type(hidden_dim, hidden_dim)
+        self.conv3 = conv_layer_type(hidden_dim, hidden_dim)
+        self.n1 = GraphNorm(hidden_dim)
+        self.n2 = GraphNorm(hidden_dim)
+        self.linear = torch.nn.Linear(hidden_dim, num_classes)
+
+    def forward(self, data):
+        x, edge_index, edge_weight = data.x, data.edge_index, data.weight
+
+        num_nodes = x.size(0)
+        adj = to_torch_csr_tensor(edge_index, edge_weight, size=(num_nodes, num_nodes))
+
+        x = self.first_linear(x)
+
+        x_ = x.clone()
+        x = F.elu(self.conv1(x, adj))
+        x = x_ + x
+        x = self.n1(x)
+        del x_
+
+        x_ = x.clone()
+        x = F.elu(self.conv2(x, adj))
+        x = x_ + x
+        x = self.n2(x)
+        del x_
+
+        x_ = x.clone()
+        x = F.elu(self.conv3(x, adj))
+        x = x_ + x
+        del x_, adj
+
+        return self.linear(x)
+
+
 class BEBlock(torch.nn.Module):
     def __init__(self, in_shape, out_shape, is_first, device, tabm_inits):
         super().__init__()
@@ -426,7 +465,7 @@ class BEBlock(torch.nn.Module):
         self.S = nn.Parameter(torch.empty(tabm_inits, out_shape, device=device))
         self.B = nn.Parameter(torch.empty(tabm_inits, out_shape, device=device))
         self.W = nn.Linear(in_shape, out_shape, bias=False)
-        
+
         self.tabm_inits = tabm_inits
         self.is_first = is_first
         self._init_weights()
