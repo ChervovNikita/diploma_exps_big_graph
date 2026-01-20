@@ -3,8 +3,9 @@ submissions
 old
 **.csv
 **.pdf
+**.log
 **/venv/
-**/splits/
+**/splits**/
 **/__pycache__/
 **/checkpoints/*.pt
 catboost_dataset/

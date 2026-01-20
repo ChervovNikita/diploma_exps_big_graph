@@ -11,11 +11,14 @@ from sklearn.metrics import f1_score, classification_report
 import random
 import pickle
 import os
-from common import MaskedGraphDataset, TAGConvModel, SingleDeviceWrapper
+from common import MaskedGraphDataset, ArbitaryModel, SingleDeviceWrapper
+from torch_geometric.nn import TAGConv, GCNConv, SGConv, SAGEConv, LEConv
 
 
 RANDOM_SEED = os.environ.get('RANDOM_SEED')
+MODEL_TYPE = os.environ.get('MODEL_TYPE')
 assert RANDOM_SEED is not None
+assert MODEL_TYPE in ['TAGConv', 'GCNConv', 'SGConv', 'SAGEConv', 'LEConv']
 RANDOM_SEED = int(RANDOM_SEED)
 
 random.seed(RANDOM_SEED)
@@ -72,7 +75,19 @@ test_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, None,
 test_loader = DataListLoader(test_dataset, batch_size=1, shuffle=False, num_workers=NUM_WORKERS)
 
 num_features = node_class.shape[1]
-model = TAGConvModel(num_features=num_features, num_classes=len(labels)).to(device)
+
+if MODEL_TYPE == 'TAGConv':
+    inside_model = TAGConv
+elif MODEL_TYPE == 'GCNConv':
+    inside_model = GCNConv
+elif MODEL_TYPE == 'SGConv':
+    inside_model = SGConv
+elif MODEL_TYPE == 'SAGEConv':
+    inside_model = SAGEConv
+elif MODEL_TYPE == 'LEConv':
+    inside_model = LEConv
+
+model = ArbitaryModel(num_features=num_features, num_classes=len(labels), conv_layer_type=inside_model).to(device)
 model.load_state_dict(torch.load(f'checkpoints/{EXP_NAME}_best.pt'))
 model = SingleDeviceWrapper(model, device)
 
