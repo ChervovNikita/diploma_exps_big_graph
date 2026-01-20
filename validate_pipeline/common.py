@@ -2,12 +2,15 @@ import random
 import torch
 from torch import nn
 from torch_geometric.data import Dataset, Data, Batch
-from torch_geometric.nn import TAGConv, GraphNorm
+from torch_geometric.nn import TAGConv, GraphNorm, GCNConv, SGConv, SAGEConv, LEConv
 from torch_geometric.utils import to_torch_csr_tensor
 import torch.nn.functional as F
 import numpy as np
 from collections import defaultdict
 from tqdm import tqdm
+
+
+## Datasets
 
 
 class MaskedGraphDataset(Dataset):
@@ -379,6 +382,9 @@ class TripletGraphDataset(Dataset):
         )
 
 
+## Models
+
+
 class TAGConvModel(torch.nn.Module):
     def __init__(self, num_features, num_classes, hidden_dim=512):
         super().__init__()
@@ -631,6 +637,76 @@ class TAGConvModelEmbeddings(torch.nn.Module):
         return x
 
 
+class MoEConvModel(torch.nn.Module):
+    def __init__(self, num_features, num_classes, top_k, hidden_dim=512):
+        super().__init__()
+        self.top_k = top_k
+        
+        self.first_linear = torch.nn.Linear(num_features, hidden_dim)
+
+        experts_list = [TAGConv, GCNConv]
+        
+        self.experts1 = torch.nn.ModuleList([experts_type(hidden_dim, hidden_dim) for experts_type in experts_list])
+        self.experts2 = torch.nn.ModuleList([experts_type(hidden_dim, hidden_dim) for experts_type in experts_list])
+        self.experts3 = torch.nn.ModuleList([experts_type(hidden_dim, hidden_dim) for experts_type in experts_list])
+        
+        self.gate1 = torch.nn.Linear(hidden_dim, len(experts_list))
+        self.gate2 = torch.nn.Linear(hidden_dim, len(experts_list))
+        self.gate3 = torch.nn.Linear(hidden_dim, len(experts_list))
+        
+        self.n1 = GraphNorm(hidden_dim)
+        self.n2 = GraphNorm(hidden_dim)
+        self.linear = torch.nn.Linear(hidden_dim, num_classes)
+
+    def _moe_forward(self, x, adj, experts, gate):
+        gate_logits = gate(x)
+        gate_weights = F.softmax(gate_logits, dim=-1)
+
+        topk_weights, topk_indices = torch.topk(gate_weights, self.top_k, dim=-1)
+        topk_weights = topk_weights / (topk_weights.sum(dim=-1, keepdim=True) + 1e-8)
+
+        expert_outputs = []
+        for expert in experts:
+            expert_outputs.append(expert(x, adj))
+        expert_outputs = torch.stack(expert_outputs, dim=1)
+
+        batch_indices = torch.arange(x.size(0), device=x.device).unsqueeze(1).expand(-1, self.top_k)
+        selected_outputs = expert_outputs[batch_indices, topk_indices]
+
+        out = (selected_outputs * topk_weights.unsqueeze(-1)).sum(dim=1)
+        return out
+
+    def forward(self, data):
+        x, edge_index, edge_weight = data.x, data.edge_index, data.weight
+
+        num_nodes = x.size(0)
+        adj = to_torch_csr_tensor(edge_index, edge_weight, size=(num_nodes, num_nodes))
+
+        x = self.first_linear(x)
+
+        x_ = x.clone()
+        x = F.elu(self._moe_forward(x, adj, self.experts1, self.gate1))
+        x = x_ + x
+        x = self.n1(x)
+        del x_
+
+        x_ = x.clone()
+        x = F.elu(self._moe_forward(x, adj, self.experts2, self.gate2))
+        x = x_ + x
+        x = self.n2(x)
+        del x_
+
+        x_ = x.clone()
+        x = F.elu(self._moe_forward(x, adj, self.experts3, self.gate3))
+        x = x_ + x
+        del x_, adj
+
+        return self.linear(x)
+
+
+## Losses
+
+
 class SemiHardTripletLoss(torch.nn.Module):
     def __init__(self, margin=1.0):
         super().__init__()
@@ -668,6 +744,9 @@ class SemiHardTripletLoss(torch.nn.Module):
         loss = loss[valid_anchors]
         
         return loss.mean() if loss.numel() > 0 else torch.tensor(0.0, device=embeddings.device)
+
+
+## Utils
 
 
 class SingleDeviceWrapper(torch.nn.Module):  # so one and multi gpu have the same interface
