@@ -25,7 +25,7 @@ EXP_NAME = os.environ.get('EXP_NAME')
 assert EXP_NAME is not None
 
 SPLITS_DIR = os.environ.get('SPLITS_DIR')
-NUM_UNKNOWN_FRACTION = 0.25
+NUM_UNKNOWN_FRACTION = 1.0
 MASK_COUNT = 1
 NUM_SAMPLES = 500
 

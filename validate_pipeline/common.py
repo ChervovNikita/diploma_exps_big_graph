@@ -644,7 +644,7 @@ class MoEConvModel(torch.nn.Module):
         
         self.first_linear = torch.nn.Linear(num_features, hidden_dim)
 
-        experts_list = [TAGConv, GCNConv]
+        experts_list = [TAGConv, GCNConv, TAGConv, GCNConv]
         
         self.experts1 = torch.nn.ModuleList([experts_type(hidden_dim, hidden_dim) for experts_type in experts_list])
         self.experts2 = torch.nn.ModuleList([experts_type(hidden_dim, hidden_dim) for experts_type in experts_list])
