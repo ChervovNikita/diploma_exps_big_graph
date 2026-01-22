@@ -12,7 +12,7 @@ VAL_TEST_RATIO = 0.5
 TYPE='balanced'
 OUTPUT_DIR = 'splits_for_simple_v2_balanced'
 
-data = pd.read_csv('../CR_2025_new_all_masks_filtered/df_graph_CR_gt80_main_plus_neighbors_targets_both_nodes.csv')
+data = pd.read_csv('../CR_gt80_semi_unlabeled_all_masks.csv')
 data['node_id1'] -= 1
 data['node_id2'] -= 1
 
