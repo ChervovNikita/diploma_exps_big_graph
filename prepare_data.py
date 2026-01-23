@@ -31,7 +31,7 @@ for _, row in data_nodes.iterrows():
     t = [row['label_Belarusians'], row['label_Northen Russians'], row['label_Southern Russians'], row['label_Ukranians']]
     found = False
     for i in range(4):
-        if t[i] >= 3 and sum(t) == t[i]:
+        if t[i] >= 3:
             found = True
             node_feats[n, i] = 1
             break
