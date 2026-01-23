@@ -37,23 +37,32 @@ NUM_SAMPLES = 500
 NUM_WORKERS = 4
 TABM_INITS = 4
 
+version = os.environ.get('VERSION', 'v1')
+
 train_nodes = np.load(os.path.join(SPLITS_DIR, 'train_nodes.npy')).tolist()
 val_nodes = np.load(os.path.join(SPLITS_DIR, 'val_nodes.npy')).tolist()
 test_nodes = np.load(os.path.join(SPLITS_DIR, 'test_nodes.npy')).tolist()
 unknown_nodes = np.load(os.path.join(SPLITS_DIR, 'unknown_nodes.npy')).tolist()
-node_labels = np.load(os.path.join(SPLITS_DIR, 'node_labels_masked.npy'))  # use this masked labels
+
 with open(os.path.join(SPLITS_DIR, 'labels.txt'), 'r') as f:
     labels = [line.strip() for line in f]
 
-print('test labels:', set(node_labels[test_nodes].tolist()))
+if version == 'v1':
+    node_labels = np.load(os.path.join(SPLITS_DIR, 'node_labels_masked.npy'))  # use this masked labels
 
-max_node = max(max(train_nodes), max(val_nodes), max(test_nodes), max(unknown_nodes))
-node_class = np.zeros((max_node + 1, len(labels)))
-for n in range(max_node + 1):
-    if node_labels[n] >= 0:
-        node_class[n, node_labels[n]] = 1
-    else:
-        node_class[n, :] = np.ones(len(labels)) / len(labels)
+    print('test labels:', set(node_labels[test_nodes].tolist()))
+
+    max_node = max(max(train_nodes), max(val_nodes), max(test_nodes), max(unknown_nodes))
+    node_class = np.zeros((max_node + 1, len(labels)))
+    for n in range(max_node + 1):
+        if node_labels[n] >= 0:
+            node_class[n, node_labels[n]] = 1
+        else:
+            node_class[n, :] = np.ones(len(labels)) / len(labels)
+
+elif version == 'v2':
+    node_class = torch.load(os.path.join(SPLITS_DIR, 'node_distr_masked.pt'))
+    node_labels = torch.tensor([torch.argmax(t) for t in node_class])
 
 data = pd.read_csv(os.path.join(SPLITS_DIR, 'edges_data.csv'))
 
