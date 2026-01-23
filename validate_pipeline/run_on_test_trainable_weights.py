@@ -31,7 +31,7 @@ EXP_NAME = os.environ.get('EXP_NAME')
 assert EXP_NAME is not None
 
 SPLITS_DIR = os.environ.get('SPLITS_DIR')
-NUM_UNKNOWN_FRACTION = 0.25
+NUM_UNKNOWN_FRACTION = 1.0
 MASK_COUNT = 1
 NUM_SAMPLES = 500
 
@@ -66,7 +66,7 @@ elif version == 'v2':
 
 data = pd.read_csv(os.path.join(SPLITS_DIR, 'edges_data.csv'))
 
-device = torch.device("cuda:0")
+device = torch.device(os.environ.get('DEVICE', 'cuda:0'))
 
 random.seed(42)
 unknown_nodes_shuffled = unknown_nodes.copy()

@@ -10,7 +10,8 @@ RANDOM_SEED = 42
 TEST_SIZE = 0.4
 VAL_TEST_RATIO = 0.5
 TYPE='balanced'
-OUTPUT_DIR = 'splits_for_simple_v2_balanced'
+OUTPUT_DIR = os.environ.get('SPLITS_DIR')
+assert OUTPUT_DIR is not None
 
 data = pd.read_csv('../CR_gt80_semi_unlabeled_all_masks.csv')
 data['node_id1'] -= 1
