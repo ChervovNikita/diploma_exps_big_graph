@@ -76,6 +76,9 @@ node_distr_masked = node_distr
 for n in test_nodes:
     node_distr_masked[n] = 1/len(labels)
 
+# for n in unknown_nodes:
+#     node_distr_masked[n] = 1/len(labels)
+
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
