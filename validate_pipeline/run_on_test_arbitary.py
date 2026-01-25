@@ -38,7 +38,7 @@ NUM_UNKNOWN_FRACTION = 1.0
 MASK_COUNT = 1
 NUM_SAMPLES = 500
 
-NUM_WORKERS = 4
+NUM_WORKERS = 64
 
 version = os.environ.get('VERSION', 'v1')
 

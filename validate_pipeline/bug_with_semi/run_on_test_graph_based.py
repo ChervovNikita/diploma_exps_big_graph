@@ -33,7 +33,7 @@ assert EXP_NAME is not None
 SPLITS_DIR = os.environ.get('SPLITS_DIR')
 NUM_UNKNOWN_FRACTION = 1.0
 
-NUM_WORKERS = 4
+NUM_WORKERS = 64
 
 version = os.environ.get('VERSION', 'v1')
 

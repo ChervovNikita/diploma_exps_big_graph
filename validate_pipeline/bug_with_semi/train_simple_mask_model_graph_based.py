@@ -38,7 +38,7 @@ WD = 0.0001
 EPOCHS = 2
 PATIENCE = 5
 BATCH_SIZE = 1
-NUM_WORKERS = 16
+NUM_WORKERS = 64
 
 version = os.environ.get('VERSION', 'v1')
 
