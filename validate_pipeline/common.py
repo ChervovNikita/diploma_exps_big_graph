@@ -560,6 +560,30 @@ class TripletGraphDataset(Dataset):
 ## Models
 
 
+class TAGConvModelBase(torch.nn.Module):
+    def __init__(self, num_features, num_classes, hidden_dim=512):
+        super().__init__()
+        self.conv1 = TAGConv(num_features, hidden_dim)
+        self.conv2 = TAGConv(hidden_dim, hidden_dim)
+        self.conv3 = TAGConv(hidden_dim, num_features)
+        self.n1 = GraphNorm(hidden_dim)
+        self.n2 = GraphNorm(hidden_dim)
+
+    def forward(self, data):
+        x, edge_index, edge_weight = data.x, data.edge_index, data.weight
+
+        num_nodes = x.size(0)
+        adj = to_torch_csr_tensor(edge_index, edge_weight, size=(num_nodes, num_nodes))
+
+        x = F.elu(self.conv1(x, adj))
+        x = self.n1(x)
+        x = F.elu(self.conv2(x, adj))
+        x = self.n2(x)
+        x = F.elu(self.conv3(x, adj))
+
+        return x
+
+
 class TAGConvModel(torch.nn.Module):
     def __init__(self, num_features, num_classes, hidden_dim=512):
         super().__init__()
