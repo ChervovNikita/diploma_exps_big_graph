@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 import pickle
 import os
 
-RANDOM_SEED = 42
+RANDOM_SEED = os.environ.get('RANDOM_SEED')
 TEST_SIZE = 0.4
 VAL_TEST_RATIO = 0.5
 TYPE='balanced'
