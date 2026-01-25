@@ -1,6 +1,6 @@
 import pandas as pd
 
-data = pd.read_csv('CR_gt80_semi_unlabeled_all_masks.csv')
+data = pd.read_csv('CR_gt80_semi_unlabeled_all_masks_final.csv')
 data['node_id1'] -= 1
 data['node_id2'] -= 1
 
