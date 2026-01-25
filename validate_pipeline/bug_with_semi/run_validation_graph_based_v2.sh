@@ -5,7 +5,7 @@ for SEED in 42; do
     export EXP_NAME="simple_masking_graph_based_one_node_v2_seed_${SEED}"
     export SUBMISSION_PATH="${EXP_NAME}.csv"
     export VERSION="v2"
-    export DEVICE="cuda:1"
+    export DEVICE="cuda:0"
     export SPLITS_DIR="splits_for_graph_based_one_node_v2_balanced"
 
     mkdir -p "$SPLITS_DIR"

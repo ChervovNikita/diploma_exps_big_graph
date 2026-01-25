@@ -305,7 +305,7 @@ class MaskedGraphDatasetGraphBasedOneNode(Dataset):
         if self.split == 'train':
             mask_nodes = [self.train_nodes[idx]]
         else:
-            mask_nodes = [self.train_nodes[idx]]
+            mask_nodes = [self.target_nodes[idx]]
             assert mask_nodes[0] not in nodes_to_include
             nodes_to_include.append(mask_nodes[0])
         
