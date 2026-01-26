@@ -579,7 +579,7 @@ class TAGConvModelBase(torch.nn.Module):
         x = self.n1(x)
         x = F.elu(self.conv2(x, adj))
         x = self.n2(x)
-        x = F.elu(self.conv3(x, adj))
+        x = self.conv3(x, adj)
 
         return x
 
