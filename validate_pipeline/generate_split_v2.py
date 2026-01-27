@@ -15,7 +15,7 @@ TYPE='balanced'
 OUTPUT_DIR = os.environ.get('SPLITS_DIR')
 assert OUTPUT_DIR is not None
 
-data = pd.read_csv('../CR_gt80_semi_unlabeled_all_masks_final.csv')
+data = pd.read_csv('/disk/10tb/home/shmelev/New_CR_2025/CE_no_masks_final/CR_gt80_semi_unlabeled_all_masks_final.csv')
 data['node_id1'] -= 1
 data['node_id2'] -= 1
 
@@ -27,7 +27,7 @@ labels = [
 ]
 
 max_node = max(data['node_id1'].max(), data['node_id2'].max())
-node_distr = torch.load('../CR_new_node_feats.pt')
+node_distr = torch.load('/disk/10tb/home/shmelev/diploma_exps_big_graph/CR_new_node_feats.pt')
 node_labels = torch.zeros(max_node + 1)
 
 known_nodes = []

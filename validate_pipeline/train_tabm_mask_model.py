@@ -40,7 +40,7 @@ WD = 0.0001
 EPOCHS = 20
 PATIENCE = 5
 BATCH_SIZE = 1
-NUM_WORKERS = 64
+NUM_WORKERS = 16
 TABM_INITS = 4
 
 version = os.environ.get('VERSION', 'v1')
