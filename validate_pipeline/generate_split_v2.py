@@ -20,10 +20,8 @@ data['node_id1'] -= 1
 data['node_id2'] -= 1
 
 labels = [
-    'Belarusians',
     'Northen Russians',
-    'Southern Russians',
-    'Ukranians'
+    'Southern Russians'
 ]
 
 max_node = max(data['node_id1'].max(), data['node_id2'].max())
