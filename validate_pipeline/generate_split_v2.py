@@ -15,15 +15,13 @@ TYPE='balanced'
 OUTPUT_DIR = os.environ.get('SPLITS_DIR')
 assert OUTPUT_DIR is not None
 
-data = pd.read_csv('../CR_gt80_semi_unlabeled_all_masks_final.csv')
+data = pd.read_csv('../CR_gt80_semi_unlabeled_all_masks_2_classes.csv')
 data['node_id1'] -= 1
 data['node_id2'] -= 1
 
 labels = [
-    'Belarusians',
     'Northen Russians',
-    'Southern Russians',
-    'Ukranians'
+    'Southern Russians'
 ]
 
 max_node = max(data['node_id1'].max(), data['node_id2'].max())
