@@ -11,7 +11,7 @@ from sklearn.metrics import f1_score, classification_report
 import random
 import pickle
 import os
-from common import MaskedGraphDatasetGraphBased, TAGConvModel, SingleDeviceWrapper
+from common import MaskedGraphDatasetGraphBasedOneNode, TAGConvModel, SingleDeviceWrapper
 
 RANDOM_SEED = os.environ.get('RANDOM_SEED')
 assert RANDOM_SEED is not None
@@ -32,8 +32,6 @@ assert EXP_NAME is not None
 
 SPLITS_DIR = os.environ.get('SPLITS_DIR')
 NUM_UNKNOWN_FRACTION = 1.0
-MASK_COUNT = 64
-NUM_SAMPLES = 500
 
 LR = 0.0001
 WD = 0.0001
@@ -80,10 +78,10 @@ num_unknown_to_use = int(len(unknown_nodes_shuffled) * NUM_UNKNOWN_FRACTION)
 unknown_nodes_subset = unknown_nodes_shuffled[:num_unknown_to_use]
 
 
-train_dataset = MaskedGraphDatasetGraphBased(data, unknown_nodes_subset, train_nodes, val_nodes, None,
-                                    split='train', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
-val_dataset = MaskedGraphDatasetGraphBased(data, unknown_nodes_subset, train_nodes, val_nodes, None,
-                                  split='val', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
+train_dataset = MaskedGraphDatasetGraphBasedOneNode(data, unknown_nodes_subset, train_nodes, val_nodes, None,
+                                    split='train', node_classes=node_class)
+val_dataset = MaskedGraphDatasetGraphBasedOneNode(data, unknown_nodes_subset, train_nodes, val_nodes, None,
+                                  split='val', node_classes=node_class)
 
 train_loader = DataListLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
 val_loader = DataListLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)

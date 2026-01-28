@@ -11,7 +11,7 @@ from sklearn.metrics import f1_score, classification_report
 import random
 import pickle
 import os
-from common import MaskedGraphDatasetGraphBased, TAGConvModelTABM, SingleDeviceWrapper
+from common import MaskedGraphDataset, TAGConvModelBase, SingleDeviceWrapper
 
 
 RANDOM_SEED = os.environ.get('RANDOM_SEED')
@@ -32,10 +32,10 @@ assert EXP_NAME is not None
 
 SPLITS_DIR = os.environ.get('SPLITS_DIR')
 NUM_UNKNOWN_FRACTION = 1.0
-MASK_COUNT = 1
+MASK_COUNT = 64
 NUM_SAMPLES = 500
+
 NUM_WORKERS = 64
-TABM_INITS = 4
 
 version = os.environ.get('VERSION', 'v1')
 
@@ -64,6 +64,7 @@ elif version == 'v2':
     node_class = torch.load(os.path.join(SPLITS_DIR, 'node_distr_masked.pt'))
     node_labels = torch.tensor([torch.argmax(t) for t in node_class])
 
+
 data = pd.read_csv(os.path.join(SPLITS_DIR, 'edges_data.csv'))
 
 device = torch.device(os.environ.get('DEVICE', 'cuda:0'))
@@ -75,13 +76,13 @@ num_unknown_to_use = int(len(unknown_nodes_shuffled) * NUM_UNKNOWN_FRACTION)
 unknown_nodes_subset = unknown_nodes_shuffled[:num_unknown_to_use]
 
 
-test_dataset = MaskedGraphDatasetGraphBased(data, unknown_nodes_subset, train_nodes, None, test_nodes,
+test_dataset = MaskedGraphDataset(data, unknown_nodes_subset, train_nodes, None, test_nodes,
                                   split='test', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
 
 test_loader = DataListLoader(test_dataset, batch_size=1, shuffle=False, num_workers=NUM_WORKERS)
 
-num_features = 5 * node_class.shape[1] + node_class.shape[1]
-model = TAGConvModelTABM(num_features=num_features, num_classes=len(labels), tabm_inits=TABM_INITS, device=device).to(device)
+num_features = node_class.shape[1]
+model = TAGConvModelBase(num_features=num_features, num_classes=len(labels)).to(device)
 model.load_state_dict(torch.load(f'checkpoints/{EXP_NAME}_best.pt'))
 model = SingleDeviceWrapper(model, device)
 
@@ -92,19 +93,10 @@ def generate_submission(model, loader, output_path, use_amp=True):
     all_predictions = []
     with torch.no_grad():
         for batch in tqdm(loader, desc='Generating submission', leave=False):
-            logits = None
-            for tabm_seed in range(TABM_INITS):
-                with torch.amp.autocast('cuda', enabled=use_amp):
-                    logits_now, batch_data = model(batch, tabm_seed=tabm_seed)
-                    if logits is None:
-                        logits = logits_now
-                    else:
-                        logits += logits_now
-                    
-                    predict_mask = batch_data.predict_mask
-                    masked_node_ids = batch_data.masked_node_ids
-
-            logits /= TABM_INITS
+            with torch.amp.autocast('cuda', enabled=use_amp):
+                logits, batch_data = model(batch)
+                predict_mask = batch_data.predict_mask
+                masked_node_ids = batch_data.masked_node_ids
 
             preds = torch.argmax(logits[predict_mask], dim=-1).cpu().tolist()
             node_ids = masked_node_ids.cpu().tolist()

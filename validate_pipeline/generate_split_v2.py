@@ -6,21 +6,22 @@ from sklearn.model_selection import train_test_split
 import pickle
 import os
 
-RANDOM_SEED = 42
+RANDOM_SEED = int(os.environ.get('RANDOM_SEED'))
+assert RANDOM_SEED is not None
+
 TEST_SIZE = 0.4
 VAL_TEST_RATIO = 0.5
 TYPE='balanced'
-OUTPUT_DIR = 'splits_for_simple_v2_balanced'
+OUTPUT_DIR = os.environ.get('SPLITS_DIR')
+assert OUTPUT_DIR is not None
 
 data = pd.read_csv('/disk/10tb/home/shmelev/New_CR_2025/CR_gt80_semi_unlabeled_all_masks.csv')
 data['node_id1'] -= 1
 data['node_id2'] -= 1
 
 labels = [
-    'Belarusians',
     'Northen Russians',
-    'Southern Russians',
-    'Ukranians'
+    'Southern Russians'
 ]
 
 max_node = max(data['node_id1'].max(), data['node_id2'].max())
@@ -74,6 +75,9 @@ test_nodes = sorted(test_nodes)
 node_distr_masked = node_distr
 for n in test_nodes:
     node_distr_masked[n] = 1/len(labels)
+
+# for n in unknown_nodes:
+#     node_distr_masked[n] = 1/len(labels)
 
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)

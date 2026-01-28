@@ -11,7 +11,7 @@ from sklearn.metrics import f1_score, classification_report
 import random
 import pickle
 import os
-from common import MaskedGraphDatasetGraphBased, TAGConvModel, SingleDeviceWrapper
+from common import MaskedGraphDatasetGraphBasedEgo, TAGConvModel, SingleDeviceWrapper
 
 RANDOM_SEED = os.environ.get('RANDOM_SEED')
 assert RANDOM_SEED is not None
@@ -80,15 +80,15 @@ num_unknown_to_use = int(len(unknown_nodes_shuffled) * NUM_UNKNOWN_FRACTION)
 unknown_nodes_subset = unknown_nodes_shuffled[:num_unknown_to_use]
 
 
-train_dataset = MaskedGraphDatasetGraphBased(data, unknown_nodes_subset, train_nodes, val_nodes, None,
+train_dataset = MaskedGraphDatasetGraphBasedEgo(data, unknown_nodes_subset, train_nodes, val_nodes, None,
                                     split='train', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
-val_dataset = MaskedGraphDatasetGraphBased(data, unknown_nodes_subset, train_nodes, val_nodes, None,
+val_dataset = MaskedGraphDatasetGraphBasedEgo(data, unknown_nodes_subset, train_nodes, val_nodes, None,
                                   split='val', mask_count=MASK_COUNT, num_samples=NUM_SAMPLES, node_classes=node_class)
 
 train_loader = DataListLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
 val_loader = DataListLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
 
-num_features = 5 * node_class.shape[1] + node_class.shape[1]
+num_features = 5 * node_class.shape[1] + node_class.shape[1] + 1
 model = SingleDeviceWrapper(TAGConvModel(num_features=num_features, num_classes=len(labels)).to(device), device)
 
 
