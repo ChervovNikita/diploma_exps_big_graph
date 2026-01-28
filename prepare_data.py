@@ -34,7 +34,7 @@ for _, row in data_nodes.iterrows():
             node_feats[n, i] = 1
             break
     if not found:
-        node_feats[n] = torch.tensor(t) / len(t)
+        node_feats[n] = torch.tensor(t) / 4
         node_feats[n] += (4 - sum(t)) * 1/4/len(t)
 
 torch.save(node_feats, 'CR_new_node_feats.pt')

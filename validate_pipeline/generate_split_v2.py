@@ -5,6 +5,8 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 import pickle
 import os
+from collections import Counter
+
 
 RANDOM_SEED = int(os.environ.get('RANDOM_SEED'))
 assert RANDOM_SEED is not None
