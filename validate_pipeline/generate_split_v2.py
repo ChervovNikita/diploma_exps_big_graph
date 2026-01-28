@@ -15,7 +15,7 @@ TYPE='balanced'
 OUTPUT_DIR = os.environ.get('SPLITS_DIR')
 assert OUTPUT_DIR is not None
 
-data = pd.read_csv('/disk/10tb/home/shmelev/New_CR_2025/CR_gt80_semi_unlabeled_all_masks.csv')
+data = pd.read_csv('/disk/10tb/home/shmelev/New_CR_2025/CR_gt80_semi_unlabeled_all_masks_2_classes.csv')
 data['node_id1'] -= 1
 data['node_id2'] -= 1
 
