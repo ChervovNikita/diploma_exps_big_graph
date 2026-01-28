@@ -1,4 +1,4 @@
-for SEED in 42 43 44 45 46 47 48 49 50 51; do
+for SEED in 42 43 44 45 46; do
     echo "Running validation with seed: $SEED"
     
     export RANDOM_SEED=$SEED

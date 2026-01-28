@@ -12,7 +12,7 @@ VAL_TEST_RATIO = 0.5
 TYPE='balanced'
 OUTPUT_DIR = 'splits_for_simple_v2_balanced'
 
-data = pd.read_csv('../CR_gt80_semi_unlabeled_all_masks.csv')
+data = pd.read_csv('/disk/10tb/home/shmelev/New_CR_2025/CR_gt80_semi_unlabeled_all_masks.csv')
 data['node_id1'] -= 1
 data['node_id2'] -= 1
 
@@ -24,7 +24,7 @@ labels = [
 ]
 
 max_node = max(data['node_id1'].max(), data['node_id2'].max())
-node_distr = torch.load('../CR_new_node_feats.pt')
+node_distr = torch.load('/disk/10tb/home/shmelev/diploma_exps_big_graph/CR_new_node_feats.pt')
 node_labels = torch.zeros(max_node + 1)
 
 known_nodes = []
