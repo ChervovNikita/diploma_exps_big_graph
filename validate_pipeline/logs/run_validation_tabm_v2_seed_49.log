@@ -1,0 +1,49 @@
+Label Belarusians: Train=0.6026490066225165, Val=0.1986754966887417, Test=0.1986754966887417
+Label Northen Russians: Train=0.5997242647058824, Val=0.19990808823529413, Test=0.20036764705882354
+Label Southern Russians: Train=0.5998864926220204, Val=0.19977298524404086, Test=0.20034052213393871
+Label Ukranians: Train=0.6016949152542372, Val=0.2033898305084746, Test=0.19491525423728814
+[Epoch 1] val_f1=0.4988 ↑ | loss=1.1959
+[Epoch 2] val_f1=0.5939 ↑ | loss=0.8691
+[Epoch 3] val_f1=0.5907 | loss=0.8215 | patience=1
+[Epoch 4] val_f1=0.5521 | loss=0.7636 | patience=2
+[Epoch 5] val_f1=0.5772 | loss=0.7637 | patience=3
+[Epoch 6] val_f1=0.5751 | loss=0.7361 | patience=4
+[Epoch 7] val_f1=0.5659 | loss=0.7306 | patience=5
+Early stopping at epoch 7
+test macro f1: 0.5539876042936719
+test classification report:                    precision    recall  f1-score   support
+
+      Belarusians     0.5250    0.7000    0.6000        30
+ Northen Russians     0.7033    0.8372    0.7644       436
+Southern Russians     0.7056    0.4618    0.5582       353
+        Ukranians     0.2115    0.4783    0.2933        23
+
+         accuracy                         0.6651       842
+        macro avg     0.5364    0.6193    0.5540       842
+     weighted avg     0.6845    0.6651    0.6592       842
+
+test confusion matrix: [[ 21   1   1   7]
+ [  6 365  61   4]
+ [ 11 149 163  30]
+ [  2   4   6  11]]
+Label Northen Russians: Train=0.5997242647058824, Val=0.19990808823529413, Test=0.20036764705882354
+Label Southern Russians: Train=0.5998864926220204, Val=0.20034052213393871, Test=0.19977298524404086
+[Epoch 1] val_f1=0.7384 ↑ | loss=0.7905
+[Epoch 2] val_f1=0.7051 | loss=0.5687 | patience=1
+[Epoch 3] val_f1=0.7268 | loss=0.5606 | patience=2
+[Epoch 4] val_f1=0.7370 | loss=0.5394 | patience=3
+[Epoch 5] val_f1=0.7211 | loss=0.5383 | patience=4
+[Epoch 6] val_f1=0.7206 | loss=0.5332 | patience=5
+Early stopping at epoch 6
+test macro f1: 0.7535446205170976
+test classification report:                    precision    recall  f1-score   support
+
+ Northen Russians     0.7798    0.7798    0.7798       436
+Southern Russians     0.7273    0.7273    0.7273       352
+
+         accuracy                         0.7563       788
+        macro avg     0.7535    0.7535    0.7535       788
+     weighted avg     0.7563    0.7563    0.7563       788
+
+test confusion matrix: [[340  96]
+ [ 96 256]]
