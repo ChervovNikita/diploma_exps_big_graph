@@ -1,0 +1,49 @@
+Label Northen Russians: Train=0.5997242647058824, Val=0.19990808823529413, Test=0.20036764705882354
+Label Southern Russians: Train=0.5998864926220204, Val=0.20034052213393871, Test=0.19977298524404086
+[Epoch 1] val_f1=0.7553 ↑ | loss=0.6964
+[Epoch 2] val_f1=0.7449 | loss=0.5476 | patience=1
+[Epoch 3] val_f1=0.7522 | loss=0.5416 | patience=2
+[Epoch 4] val_f1=0.7185 | loss=0.5198 | patience=3
+[Epoch 5] val_f1=0.7291 | loss=0.5168 | patience=4
+[Epoch 6] val_f1=0.7473 | loss=0.5117 | patience=5
+Early stopping at epoch 6
+test macro f1: 0.7243952200524628
+test classification report:                    precision    recall  f1-score   support
+
+ Northen Russians     0.7683    0.7225    0.7447       436
+Southern Russians     0.6799    0.7301    0.7041       352
+
+         accuracy                         0.7259       788
+        macro avg     0.7241    0.7263    0.7244       788
+     weighted avg     0.7288    0.7259    0.7266       788
+
+test confusion matrix: [[315 121]
+ [ 95 257]]
+Label Northen Russians: Train=0.5999874308697838, Val=0.19997486173956763, Test=0.20003770739064858
+Label Southern Russians: Train=0.6000228623685414, Val=0.20004572473708276, Test=0.19993141289437585
+[Epoch 1] val_f1=0.5904 ↑ | loss=0.7308
+[Epoch 2] val_f1=0.5668 | loss=0.6690 | patience=1
+[Epoch 3] val_f1=0.5947 ↑ | loss=0.6519
+[Epoch 4] val_f1=0.6007 ↑ | loss=0.6427
+[Epoch 5] val_f1=0.6056 ↑ | loss=0.6420
+[Epoch 6] val_f1=0.6112 ↑ | loss=0.6357
+[Epoch 7] val_f1=0.6091 | loss=0.6329 | patience=1
+[Epoch 8] val_f1=0.6114 ↑ | loss=0.6346
+[Epoch 9] val_f1=0.6087 | loss=0.6350 | patience=1
+[Epoch 10] val_f1=0.6085 | loss=0.6337 | patience=2
+[Epoch 11] val_f1=0.6107 | loss=0.6325 | patience=3
+[Epoch 12] val_f1=0.6041 | loss=0.6340 | patience=4
+[Epoch 13] val_f1=0.6090 | loss=0.6342 | patience=5
+Early stopping at epoch 13
+test macro f1: 0.6254247459025617
+test classification report:                    precision    recall  f1-score   support
+
+ Northen Russians     0.7617    0.6406    0.6959      3183
+Southern Russians     0.4927    0.6352    0.5549      1749
+
+         accuracy                         0.6387      4932
+        macro avg     0.6272    0.6379    0.6254      4932
+     weighted avg     0.6663    0.6387    0.6459      4932
+
+test confusion matrix: [[2039 1144]
+ [ 638 1111]]

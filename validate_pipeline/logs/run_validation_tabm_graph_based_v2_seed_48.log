@@ -1,0 +1,42 @@
+Label Northen Russians: Train=0.5997242647058824, Val=0.19990808823529413, Test=0.20036764705882354
+Label Southern Russians: Train=0.5998864926220204, Val=0.20034052213393871, Test=0.19977298524404086
+[Epoch 1] val_f1=0.7524 ↑ | loss=0.6994
+[Epoch 2] val_f1=0.7157 | loss=0.5621 | patience=1
+[Epoch 3] val_f1=0.7407 | loss=0.5414 | patience=2
+[Epoch 4] val_f1=0.7435 | loss=0.5274 | patience=3
+[Epoch 5] val_f1=0.7463 | loss=0.5219 | patience=4
+[Epoch 6] val_f1=0.7404 | loss=0.5208 | patience=5
+Early stopping at epoch 6
+test macro f1: 0.7399543871342966
+test classification report:                    precision    recall  f1-score   support
+
+ Northen Russians     0.7623    0.7798    0.7710       436
+Southern Russians     0.7193    0.6989    0.7089       352
+
+         accuracy                         0.7437       788
+        macro avg     0.7408    0.7393    0.7400       788
+     weighted avg     0.7431    0.7437    0.7433       788
+
+test confusion matrix: [[340  96]
+ [106 246]]
+Label Northen Russians: Train=0.5999874308697838, Val=0.19997486173956763, Test=0.20003770739064858
+Label Southern Russians: Train=0.6000228623685414, Val=0.20004572473708276, Test=0.19993141289437585
+[Epoch 1] val_f1=0.6167 ↑ | loss=0.7519
+[Epoch 2] val_f1=0.5949 | loss=0.6731 | patience=1
+[Epoch 3] val_f1=0.5991 | loss=0.6583 | patience=2
+[Epoch 4] val_f1=0.6016 | loss=0.6512 | patience=3
+[Epoch 5] val_f1=0.6041 | loss=0.6468 | patience=4
+[Epoch 6] val_f1=0.6044 | loss=0.6432 | patience=5
+Early stopping at epoch 6
+test macro f1: 0.6090287496173288
+test classification report:                    precision    recall  f1-score   support
+
+ Northen Russians     0.7112    0.8146    0.7594      3183
+Southern Russians     0.5412    0.3979    0.4586      1749
+
+         accuracy                         0.6669      4932
+        macro avg     0.6262    0.6063    0.6090      4932
+     weighted avg     0.6509    0.6669    0.6528      4932
+
+test confusion matrix: [[2593  590]
+ [1053  696]]

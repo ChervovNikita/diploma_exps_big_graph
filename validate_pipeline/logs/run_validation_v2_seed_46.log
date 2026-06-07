@@ -1,0 +1,48 @@
+Label Belarusians: Train=0.6, Val=0.2, Test=0.2
+Label Northen Russians: Train=0.5996978851963746, Val=0.1998992950654582, Test=0.20040281973816718
+Label Southern Russians: Train=0.6002570694087404, Val=0.19987146529562982, Test=0.19987146529562982
+Label Ukranians: Train=0.6024096385542169, Val=0.20481927710843373, Test=0.1927710843373494
+[Epoch 1] val_f1=0.6709 ↑ | loss=1.0622
+[Epoch 2] val_f1=0.6412 | loss=0.7183 | patience=1
+[Epoch 3] val_f1=0.6078 | loss=0.6813 | patience=2
+[Epoch 4] val_f1=0.6279 | loss=0.6459 | patience=3
+[Epoch 5] val_f1=0.6603 | loss=0.6168 | patience=4
+[Epoch 6] val_f1=0.6209 | loss=0.6027 | patience=5
+Early stopping at epoch 6
+test macro f1: 0.6172563920501071
+test classification report:                    precision    recall  f1-score   support
+
+      Belarusians     0.7619    0.6154    0.6809        26
+ Northen Russians     0.8873    0.6131    0.7251       398
+Southern Russians     0.6294    0.8682    0.7297       311
+        Ukranians     0.2692    0.4375    0.3333        16
+
+         accuracy                         0.7150       751
+        macro avg     0.6369    0.6335    0.6173       751
+     weighted avg     0.7630    0.7150    0.7171       751
+
+test confusion matrix: [[ 16   1   6   3]
+ [  1 244 146   7]
+ [  2  30 270   9]
+ [  2   0   7   7]]
+Label Northen Russians: Train=0.5999703791469194, Val=0.19994075829383887, Test=0.20008886255924171
+Label Southern Russians: Train=0.6, Val=0.2, Test=0.2
+[Epoch 1] val_f1=0.6536 ↑ | loss=0.6391
+[Epoch 2] val_f1=0.6489 | loss=0.6141 | patience=1
+[Epoch 3] val_f1=0.6492 | loss=0.6077 | patience=2
+[Epoch 4] val_f1=0.6445 | loss=0.6011 | patience=3
+[Epoch 5] val_f1=0.6442 | loss=0.5988 | patience=4
+[Epoch 6] val_f1=0.6424 | loss=0.6013 | patience=5
+Early stopping at epoch 6
+test macro f1: 0.654855978323251
+test classification report:                    precision    recall  f1-score   support
+
+ Northen Russians     0.7092    0.6987    0.7040      1351
+Southern Russians     0.5998    0.6118    0.6058       997
+
+         accuracy                         0.6618      2348
+        macro avg     0.6545    0.6553    0.6549      2348
+     weighted avg     0.6628    0.6618    0.6623      2348
+
+test confusion matrix: [[944 407]
+ [387 610]]

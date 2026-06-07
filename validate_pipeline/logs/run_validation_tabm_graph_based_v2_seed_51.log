@@ -1,0 +1,46 @@
+Label Northen Russians: Train=0.5997242647058824, Val=0.19990808823529413, Test=0.20036764705882354
+Label Southern Russians: Train=0.5998864926220204, Val=0.20034052213393871, Test=0.19977298524404086
+[Epoch 1] val_f1=0.6071 ↑ | loss=0.6506
+[Epoch 2] val_f1=0.7300 ↑ | loss=0.5520
+[Epoch 3] val_f1=0.6850 | loss=0.5202 | patience=1
+[Epoch 4] val_f1=0.7385 ↑ | loss=0.5131
+[Epoch 5] val_f1=0.7341 | loss=0.5107 | patience=1
+[Epoch 6] val_f1=0.7292 | loss=0.4997 | patience=2
+[Epoch 7] val_f1=0.7281 | loss=0.4977 | patience=3
+[Epoch 8] val_f1=0.7327 | loss=0.5036 | patience=4
+[Epoch 9] val_f1=0.7270 | loss=0.5016 | patience=5
+Early stopping at epoch 9
+test macro f1: 0.7347951872730685
+test classification report:                    precision    recall  f1-score   support
+
+ Northen Russians     0.7808    0.7271    0.7530       436
+Southern Russians     0.6885    0.7472    0.7166       352
+
+         accuracy                         0.7360       788
+        macro avg     0.7346    0.7371    0.7348       788
+     weighted avg     0.7396    0.7360    0.7367       788
+
+test confusion matrix: [[317 119]
+ [ 89 263]]
+Label Northen Russians: Train=0.5999874308697838, Val=0.19997486173956763, Test=0.20003770739064858
+Label Southern Russians: Train=0.6000228623685414, Val=0.20004572473708276, Test=0.19993141289437585
+[Epoch 1] val_f1=0.5807 ↑ | loss=0.7315
+[Epoch 2] val_f1=0.6413 ↑ | loss=0.6722
+[Epoch 3] val_f1=0.6065 | loss=0.6572 | patience=1
+[Epoch 4] val_f1=0.6326 | loss=0.6471 | patience=2
+[Epoch 5] val_f1=0.6188 | loss=0.6462 | patience=3
+[Epoch 6] val_f1=0.6256 | loss=0.6436 | patience=4
+[Epoch 7] val_f1=0.6338 | loss=0.6396 | patience=5
+Early stopping at epoch 7
+test macro f1: 0.612702050297512
+test classification report:                    precision    recall  f1-score   support
+
+ Northen Russians     0.7391    0.6657    0.7005      3183
+Southern Russians     0.4847    0.5723    0.5249      1749
+
+         accuracy                         0.6326      4932
+        macro avg     0.6119    0.6190    0.6127      4932
+     weighted avg     0.6489    0.6326    0.6382      4932
+
+test confusion matrix: [[2119 1064]
+ [ 748 1001]]

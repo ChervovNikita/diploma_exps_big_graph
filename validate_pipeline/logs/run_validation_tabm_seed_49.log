@@ -1,0 +1,72 @@
+Label Belarusians: Train=0.600297176820208, Val=0.20059435364041606, Test=0.19910846953937592
+Label Northen Russians: Train=0.599873577749684, Val=0.1997471554993679, Test=0.20037926675094817
+Label Southern Russians: Train=0.5996216897856242, Val=0.19987389659520807, Test=0.2005044136191677
+Label Ukranians: Train=0.5997474747474747, Val=0.20075757575757575, Test=0.1994949494949495
+Filtered test nodes: 927 -> 927
+test labels: {-1}
+[Epoch 1] val_f1=0.6702 ↑ | loss=1.1064
+[Epoch 2] val_f1=0.6847 ↑ | loss=0.8083
+[Epoch 3] val_f1=0.7166 ↑ | loss=0.7658
+[Epoch 4] val_f1=0.7176 ↑ | loss=0.7708
+[Epoch 5] val_f1=0.7232 ↑ | loss=0.7649
+[Epoch 6] val_f1=0.7239 ↑ | loss=0.7642
+[Epoch 7] val_f1=0.7239 | loss=0.7704 | patience=1
+[Epoch 8] val_f1=0.7239 | loss=0.7714 | patience=2
+[Epoch 9] val_f1=0.7239 | loss=0.7687 | patience=3
+[Epoch 10] val_f1=0.7239 | loss=0.7672 | patience=4
+test labels: {-1}
+test macro f1: 0.7134573591419316
+test classification report:                    precision    recall  f1-score   support
+
+      Belarusians     0.6067    0.6791    0.6408       134
+ Northen Russians     0.8416    0.8549    0.8482       317
+Southern Russians     0.8077    0.7925    0.8000       318
+        Ukranians     0.5944    0.5380    0.5648       158
+
+         accuracy                         0.7540       927
+        macro avg     0.7126    0.7161    0.7135       927
+     weighted avg     0.7539    0.7540    0.7534       927
+
+test confusion matrix: [[ 91  10   6  27]
+ [  2 271  31  13]
+ [ 26  22 252  18]
+ [ 31  19  23  85]]
+Label Belarusians: Train=0.600297176820208, Val=0.20059435364041606, Test=0.19910846953937592
+Label Northen Russians: Train=0.599873577749684, Val=0.1997471554993679, Test=0.20037926675094817
+Label Southern Russians: Train=0.5996216897856242, Val=0.19987389659520807, Test=0.2005044136191677
+Label Ukranians: Train=0.5997474747474747, Val=0.20075757575757575, Test=0.1994949494949495
+Filtered test nodes: 927 -> 927
+test labels: {-1}
+[Epoch 1] val_f1=0.6492 ↑ | loss=1.2474
+[Epoch 2] val_f1=0.6901 ↑ | loss=0.8713
+[Epoch 3] val_f1=0.7298 ↑ | loss=0.7974
+[Epoch 4] val_f1=0.7133 | loss=0.7678 | patience=1
+[Epoch 5] val_f1=0.7279 | loss=0.7334 | patience=2
+[Epoch 6] val_f1=0.7358 ↑ | loss=0.7231
+[Epoch 7] val_f1=0.7396 ↑ | loss=0.7155
+[Epoch 8] val_f1=0.7392 | loss=0.7081 | patience=1
+[Epoch 9] val_f1=0.7393 | loss=0.7081 | patience=2
+[Epoch 10] val_f1=0.7486 ↑ | loss=0.7128
+[Epoch 11] val_f1=0.7357 | loss=0.7070 | patience=1
+[Epoch 12] val_f1=0.7359 | loss=0.7028 | patience=2
+[Epoch 13] val_f1=0.7348 | loss=0.7011 | patience=3
+[Epoch 14] val_f1=0.7425 | loss=0.6995 | patience=4
+[Epoch 15] val_f1=0.7370 | loss=0.6941 | patience=5
+Early stopping at epoch 15
+test labels: {-1}
+test macro f1: 0.7583974091688301
+test classification report:                    precision    recall  f1-score   support
+
+      Belarusians     0.7027    0.7761    0.7376       134
+ Northen Russians     0.8333    0.8517    0.8424       317
+Southern Russians     0.8134    0.7287    0.7687       317
+        Ukranians     0.6608    0.7107    0.6848       159
+
+         accuracy                         0.7745       927
+        macro avg     0.7526    0.7668    0.7584       927
+     weighted avg     0.7780    0.7745    0.7750       927
+
+test confusion matrix: [[104   7   7  16]
+ [  5 270  31  11]
+ [ 19  36 231  31]
+ [ 20  11  15 113]]

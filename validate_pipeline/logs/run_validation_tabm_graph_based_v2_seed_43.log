@@ -1,0 +1,46 @@
+Label Northen Russians: Train=0.5997242647058824, Val=0.19990808823529413, Test=0.20036764705882354
+Label Southern Russians: Train=0.5998864926220204, Val=0.20034052213393871, Test=0.19977298524404086
+[Epoch 1] val_f1=0.7349 ↑ | loss=0.7005
+[Epoch 2] val_f1=0.6794 | loss=0.5467 | patience=1
+[Epoch 3] val_f1=0.7268 | loss=0.5341 | patience=2
+[Epoch 4] val_f1=0.7393 ↑ | loss=0.5260
+[Epoch 5] val_f1=0.7334 | loss=0.5189 | patience=1
+[Epoch 6] val_f1=0.7356 | loss=0.5104 | patience=2
+[Epoch 7] val_f1=0.7322 | loss=0.5090 | patience=3
+[Epoch 8] val_f1=0.7302 | loss=0.5067 | patience=4
+[Epoch 9] val_f1=0.7362 | loss=0.5083 | patience=5
+Early stopping at epoch 9
+test macro f1: 0.7233056935397619
+test classification report:                    precision    recall  f1-score   support
+
+ Northen Russians     0.8011    0.6651    0.7268       436
+Southern Russians     0.6573    0.7955    0.7198       352
+
+         accuracy                         0.7234       788
+        macro avg     0.7292    0.7303    0.7233       788
+     weighted avg     0.7369    0.7234    0.7237       788
+
+test confusion matrix: [[290 146]
+ [ 72 280]]
+Label Northen Russians: Train=0.5999874308697838, Val=0.19997486173956763, Test=0.20003770739064858
+Label Southern Russians: Train=0.6000228623685414, Val=0.20004572473708276, Test=0.19993141289437585
+[Epoch 1] val_f1=0.5964 ↑ | loss=0.7497
+[Epoch 2] val_f1=0.6169 ↑ | loss=0.6791
+[Epoch 3] val_f1=0.5957 | loss=0.6605 | patience=1
+[Epoch 4] val_f1=0.6099 | loss=0.6554 | patience=2
+[Epoch 5] val_f1=0.6130 | loss=0.6471 | patience=3
+[Epoch 6] val_f1=0.6066 | loss=0.6460 | patience=4
+[Epoch 7] val_f1=0.6140 | loss=0.6452 | patience=5
+Early stopping at epoch 7
+test macro f1: 0.6325490408518271
+test classification report:                    precision    recall  f1-score   support
+
+ Northen Russians     0.7418    0.7286    0.7351      3183
+Southern Russians     0.5216    0.5386    0.5300      1749
+
+         accuracy                         0.6612      4932
+        macro avg     0.6317    0.6336    0.6325      4932
+     weighted avg     0.6637    0.6612    0.6624      4932
+
+test confusion matrix: [[2319  864]
+ [ 807  942]]
